@@ -1,4 +1,5 @@
 <!-- LOVABLE:BEGIN -->
+
 > [!IMPORTANT]
 > This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
 > published git history — force pushing, or rebasing/amending/squashing commits
@@ -7,6 +8,7 @@
 >
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
+
 <!-- LOVABLE:END -->
 
 - Invoice PDFs are built with pdf-lib: the scanned form JPEG (public/templates) is the page background and data is drawn as text at measured coordinates in src/lib/invoice/render.ts — why: preserves the original form exactly; the preview iframe shows that same PDF.

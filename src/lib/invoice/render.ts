@@ -1,65 +1,15 @@
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { calcLine, calcTotals, peso } from "./calc";
-import type { InvoiceData, InvoiceType } from "./types";
-
-/*
- * Output = scanned original form as page background + data drawn as real PDF text.
- * Coordinates below are measured in pixels on a 909px-wide render of each template
- * and converted to PDF points. Page size matches the original template PDFs.
- */
-const PAGE_W = 594.72;
-const PAGE_H = 774.72;
-const S = PAGE_W / 909;
-
-interface Layout {
-  serial: { x: number; y: number; w: number; h: number };
-  date: { x: number; y: number };
-  name: { x: number; y: number };
-  tin: { x: number; y: number };
-  address: { x: number; y: number };
-  side: { x: number; y: number; step: number }; // terms / due / PO under DATE
-  rows: { top: number; h: number; count: number };
-  cols: { item: [number, number]; desc: [number, number]; qty: [number, number]; unit: [number, number]; amount: [number, number] };
-  totalsRight: number;
-  totalsY: { total: number; vat: number; net: number; wht: number; due: number };
-  leftRight: number;
-  leftY: { vatable: number; vatAmount: number };
-  ref: { x: number; y: number };
-}
-
-const LAYOUTS: Record<InvoiceType, Layout> = {
-  charge: {
-    serial: { x: 696, y: 62, w: 92, h: 36 },
-    date: { x: 714, y: 174 },
-    name: { x: 186, y: 193 },
-    tin: { x: 186, y: 205 },
-    address: { x: 186, y: 218 },
-    side: { x: 560, y: 201, step: 14 },
-    rows: { top: 352, h: 27.3, count: 10 },
-    cols: { item: [16, 132], desc: [137, 586], qty: [590, 661], unit: [665, 754], amount: [759, 846] },
-    totalsRight: 839,
-    totalsY: { total: 711, vat: 741, net: 768, wht: 863, due: 903 },
-    leftRight: 268,
-    leftY: { vatable: 793, vatAmount: 887 },
-    ref: { x: 20, y: 668 },
-  },
-  cash: {
-    serial: { x: 684, y: 70, w: 92, h: 36 },
-    date: { x: 718, y: 185 },
-    name: { x: 192, y: 220 },
-    tin: { x: 192, y: 232 },
-    address: { x: 192, y: 245 },
-    side: { x: 560, y: 210, step: 14 },
-    rows: { top: 372, h: 27.1, count: 10 },
-    cols: { item: [48, 151], desc: [157, 580], qty: [584, 649], unit: [653, 737], amount: [742, 824] },
-    totalsRight: 822,
-    totalsY: { total: 694, vat: 725, net: 752, wht: 847, due: 886 },
-    leftRight: 289,
-    leftY: { vatable: 790, vatAmount: 884 },
-    ref: { x: 52, y: 680 },
-  },
-};
+import type { InvoiceData } from "./types";
+import {
+  LETTER_WIDTH_MM,
+  LETTER_HEIGHT_MM,
+  mmToPt,
+  type InvoiceLayout,
+  type LayoutField,
+} from "./layout-types";
+import { loadActiveLayout } from "./layout-store";
 
 export const ROWS_PER_PAGE = 10;
 
@@ -80,12 +30,30 @@ const loadAsset = (url: string) => {
 const INK = rgb(0.05, 0.07, 0.16);
 const RED = rgb(0.78, 0.12, 0.15);
 
-export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
-  const L = LAYOUTS[inv.type];
+function parseColor(hex: string | undefined, fallback = INK) {
+  if (!hex || !hex.startsWith("#")) return fallback;
+  const clean = hex.replace("#", "");
+  if (clean.length === 6) {
+    const r = parseInt(clean.slice(0, 2), 16) / 255;
+    const g = parseInt(clean.slice(2, 4), 16) / 255;
+    const b = parseInt(clean.slice(4, 6), 16) / 255;
+    if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return rgb(r, g, b);
+  }
+  return fallback;
+}
+
+/** Render a fully customized invoice PDF with Letter dimensions and custom field layouts */
+export async function renderInvoicePdf(
+  inv: InvoiceData,
+  customLayout?: InvoiceLayout,
+): Promise<Uint8Array> {
+  const layout = customLayout || loadActiveLayout(inv.type);
+
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
-  doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber}`);
+  doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
+
   const [bg, reg, bold] = await Promise.all([
     loadAsset(`/templates/${inv.type}.jpg`),
     loadAsset("/fonts/DejaVuSans.ttf"),
@@ -95,99 +63,213 @@ export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
   const font = await doc.embedFont(reg, { subset: true });
   const fontB = await doc.embedFont(bold, { subset: true });
 
-  const pts = (px: number) => px * S;
-  const ypt = (pxTop: number) => PAGE_H - pxTop * S;
+  const pageW = mmToPt(layout.pageWidthMm || LETTER_WIDTH_MM);
+  const pageH = mmToPt(layout.pageHeightMm || LETTER_HEIGHT_MM);
 
-  const text = (p: PDFPage, s: string, x: number, yPx: number, size = 8, f: PDFFont = font, color = INK) => {
-    if (!s) return;
-    p.drawText(s, { x: pts(x), y: ypt(yPx) - size * 0.35, size, font: f, color });
+  const fieldsMap = new Map<string, LayoutField>();
+  layout.fields.forEach((f) => {
+    fieldsMap.set(f.type, f);
+    fieldsMap.set(f.id, f);
+  });
+
+  const getField = (type: string): LayoutField | undefined => {
+    return fieldsMap.get(type);
   };
-  const right = (p: PDFPage, s: string, xRight: number, yPx: number, size = 8, f: PDFFont = font) => {
-    if (!s) return;
-    const w = f.widthOfTextAtSize(s, size);
-    p.drawText(s, { x: pts(xRight) - w, y: ypt(yPx) - size * 0.35, size, font: f, color: INK });
+
+  /** Convert top-left millimeter coordinates to PDF bottom-left points */
+  const toPdfBox = (field: LayoutField) => {
+    const x = mmToPt(field.x);
+    const y = pageH - mmToPt(field.y) - mmToPt(field.h);
+    const w = mmToPt(field.w);
+    const h = mmToPt(field.h);
+    return { x, y, w, h };
   };
-  /** Fit text inside [x0,x1]: shrink to minSize, then wrap to two lines. */
-  const fit = (p: PDFPage, s: string, [x0, x1]: [number, number], yPx: number, size = 8, align: "left" | "right" | "center" = "left") => {
-    if (!s) return;
-    const maxW = pts(x1 - x0) - 4;
-    let sz = size;
-    while (sz > 6 && font.widthOfTextAtSize(s, sz) > maxW) sz -= 0.25;
-    const draw = (str: string, y: number) => {
-      const w = font.widthOfTextAtSize(str, sz);
-      const x = align === "right" ? pts(x1) - 2 - w : align === "center" ? pts((x0 + x1) / 2) - w / 2 : pts(x0) + 2;
-      p.drawText(str, { x, y, size: sz, font, color: INK });
-    };
-    if (font.widthOfTextAtSize(s, sz) <= maxW) return draw(s, ypt(yPx) - sz * 0.35);
-    // wrap into two lines
-    sz = 6;
-    const words = s.split(" ");
-    let a = "";
-    while (words.length && font.widthOfTextAtSize((a + " " + words[0]).trim(), sz) <= maxW) a = (a + " " + words.shift()).trim();
-    let b = words.join(" ");
-    while (b && font.widthOfTextAtSize(b, sz) > maxW) b = b.slice(0, -2) + "…";
-    draw(a, ypt(yPx) + sz * 0.25);
-    draw(b, ypt(yPx) - sz * 0.95);
+
+  const drawFieldText = (
+    p: PDFPage,
+    field: LayoutField | undefined,
+    str: string,
+    overrideFont?: PDFFont,
+  ) => {
+    if (!field || !field.visible || !str) return;
+    const { x, y, w, h } = toPdfBox(field);
+    const f = overrideFont || (field.fontWeight === "bold" ? fontB : font);
+    const color = parseColor(field.color, INK);
+    const sz = field.fontSize || 8;
+
+    // Single-line or fitted text within width
+    const textWidth = f.widthOfTextAtSize(str, sz);
+    let textX = x;
+    if (field.align === "right") {
+      textX = x + w - textWidth;
+    } else if (field.align === "center") {
+      textX = x + (w - textWidth) / 2;
+    }
+
+    // Baseline placement in vertical center of field height
+    const baselineY = y + (h - sz) / 2 + sz * 0.15;
+
+    if (field.wrapText && textWidth > w) {
+      // Split into lines
+      const words = str.split(" ");
+      const lines: string[] = [];
+      let current = "";
+      for (const word of words) {
+        const test = current ? `${current} ${word}` : word;
+        if (f.widthOfTextAtSize(test, sz) <= w) {
+          current = test;
+        } else {
+          if (current) lines.push(current);
+          current = word;
+        }
+      }
+      if (current) lines.push(current);
+
+      const lineHeight = sz * 1.15;
+      const totalH = lines.length * lineHeight;
+      let startY = y + (h + totalH) / 2 - sz;
+
+      for (const line of lines) {
+        const lineW = f.widthOfTextAtSize(line, sz);
+        let lineX = x;
+        if (field.align === "right") lineX = x + w - lineW;
+        else if (field.align === "center") lineX = x + (w - lineW) / 2;
+        p.drawText(line, { x: lineX, y: startY, size: sz, font: f, color });
+        startY -= lineHeight;
+      }
+    } else {
+      // If single line exceeds width, auto shrink down to 6pt if needed
+      let actualSize = sz;
+      if (textWidth > w && w > 10) {
+        while (actualSize > 6 && f.widthOfTextAtSize(str, actualSize) > w) {
+          actualSize -= 0.25;
+        }
+        const newW = f.widthOfTextAtSize(str, actualSize);
+        if (field.align === "right") textX = x + w - newW;
+        else if (field.align === "center") textX = x + (w - newW) / 2;
+      }
+
+      p.drawText(str, { x: textX, y: baselineY, size: actualSize, font: f, color });
+    }
   };
 
   const totals = calcTotals(inv.items, inv.whtRate);
-  const pageCount = Math.max(1, Math.ceil(inv.items.length / ROWS_PER_PAGE));
+  const rowsPerPage = layout.tableConfig?.rowCount || ROWS_PER_PAGE;
+  const pageCount = Math.max(1, Math.ceil(inv.items.length / rowsPerPage));
 
   for (let pi = 0; pi < pageCount; pi++) {
-    const p = doc.addPage([PAGE_W, PAGE_H]);
-    p.drawImage(img, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+    const p = doc.addPage([pageW, pageH]);
 
-    // Replace the pre-printed serial with this invoice's number
-    p.drawRectangle({ x: pts(L.serial.x), y: ypt(L.serial.y + L.serial.h), width: pts(L.serial.w), height: pts(L.serial.h), color: rgb(1, 1, 1) });
-    if (inv.invoiceNumber) {
-      let sz = 15;
-      while (sz > 8 && font.widthOfTextAtSize(inv.invoiceNumber, sz) > pts(L.serial.w) - 2) sz -= 0.5;
-      text(p, inv.invoiceNumber, L.serial.x + 2, L.serial.y + L.serial.h / 2 + 2, sz, font, RED);
+    // Optional background template
+    if (layout.showBackgroundTemplate) {
+      p.drawImage(img, {
+        x: 0,
+        y: 0,
+        width: pageW,
+        height: pageH,
+        opacity: layout.backgroundOpacity ?? 1.0,
+      });
     }
 
-    text(p, inv.date, L.date.x, L.date.y, 9);
-    fit(p, inv.customer, [L.name.x, 655], L.name.y, 8.5);
-    text(p, inv.tin, L.tin.x, L.tin.y, 8);
-    fit(p, inv.address, [L.address.x, 655], L.address.y, 8);
-    const side = [
-      ["TERMS", inv.terms],
-      ["DUE DATE", inv.dueDate],
-      ["PO NUMBER", inv.poNumber],
-    ].filter(([, v]) => v) as [string, string][];
-    side.forEach(([k, v], i) => {
-      const y = L.side.y + i * L.side.step;
-      text(p, k, L.side.x + 110, y, 6.5, fontB);
-      text(p, v, L.side.x + 182, y, 8);
-    });
+    // Invoice Serial Number
+    const fSerial = getField("invoiceNumber");
+    if (fSerial && fSerial.visible && inv.invoiceNumber) {
+      const box = toPdfBox(fSerial);
+      // Clean whiteout under serial if template is shown
+      if (layout.showBackgroundTemplate) {
+        p.drawRectangle({
+          x: box.x,
+          y: box.y,
+          width: box.w,
+          height: box.h,
+          color: rgb(1, 1, 1),
+        });
+      }
+      drawFieldText(p, fSerial, inv.invoiceNumber, fontB);
+    }
 
-    const slice = inv.items.slice(pi * ROWS_PER_PAGE, (pi + 1) * ROWS_PER_PAGE);
+    // Header fields
+    drawFieldText(p, getField("date"), inv.date);
+    drawFieldText(p, getField("customer"), inv.customer);
+    drawFieldText(p, getField("tin"), inv.tin);
+    drawFieldText(p, getField("address"), inv.address);
+    drawFieldText(p, getField("terms"), inv.terms);
+    drawFieldText(p, getField("dueDate"), inv.dueDate);
+    drawFieldText(p, getField("poNumber"), inv.poNumber);
+
+    const fSalesRep = getField("salesRep");
+    if (fSalesRep && fSalesRep.visible && inv.salesRep) {
+      drawFieldText(p, fSalesRep, `Sales Rep: ${inv.salesRep}`);
+    }
+
+    // Line items table
+    const fColItem = getField("colItem");
+    const fColDesc = getField("colDesc");
+    const fColQty = getField("colQty");
+    const fColUnit = getField("colUnit");
+    const fColAmount = getField("colAmount");
+
+    const rowTop = layout.tableConfig?.rowTopMm || 81.5;
+    const rowH = layout.tableConfig?.rowHeightMm || 6.3;
+
+    const slice = inv.items.slice(pi * rowsPerPage, (pi + 1) * rowsPerPage);
     slice.forEach((it, i) => {
-      const y = L.rows.top + L.rows.h * i + L.rows.h / 2;
+      const itemRowY = rowTop + i * rowH;
       const c = calcLine(it);
-      fit(p, it.item, L.cols.item, y, 7.5);
-      fit(p, it.description, L.cols.desc, y, 8);
-      fit(p, it.qty, L.cols.qty, y, 8, "center");
+
+      const drawRowCol = (
+        colField: LayoutField | undefined,
+        textStr: string,
+        overrideAlign?: "left" | "center" | "right",
+      ) => {
+        if (!colField || !colField.visible || !textStr) return;
+        const colFieldClone: LayoutField = {
+          ...colField,
+          y: itemRowY,
+          h: rowH,
+          align: overrideAlign || colField.align,
+        };
+        drawFieldText(p, colFieldClone, textStr);
+      };
+
+      drawRowCol(fColItem, it.item);
+      drawRowCol(fColDesc, it.description);
+      drawRowCol(fColQty, it.qty, "center");
       if (c.valid) {
-        fit(p, peso(c.vatUnit), L.cols.unit, y, 7.5, "right");
-        fit(p, peso(c.amount), L.cols.amount, y, 7.5, "right");
+        drawRowCol(fColUnit, peso(c.vatUnit), "right");
+        drawRowCol(fColAmount, peso(c.amount), "right");
       }
     });
 
-    if (inv.invoiceNumber) text(p, `Ref No.: ${inv.invoiceNumber}`, L.ref.x, L.ref.y, 8);
-    if (inv.salesRep) text(p, `Sales Rep: ${inv.salesRep}`, L.ref.x, L.ref.y + 14, 8);
-    if (pageCount > 1) text(p, `Page ${pi + 1} of ${pageCount}`, L.ref.x, L.ref.y + 28, 7);
-
-    if (pi === pageCount - 1) {
-      right(p, peso(totals.totalSales), L.totalsRight, L.totalsY.total, 8);
-      right(p, peso(totals.vat), L.totalsRight, L.totalsY.vat, 8);
-      right(p, peso(totals.net), L.totalsRight, L.totalsY.net, 8);
-      right(p, `(${peso(totals.wht)})`, L.totalsRight, L.totalsY.wht, 8);
-      right(p, peso(totals.due), L.totalsRight, L.totalsY.due, 10, fontB);
-      right(p, peso(totals.net), L.leftRight, L.leftY.vatable, 8);
-      right(p, peso(totals.vat), L.leftRight, L.leftY.vatAmount, 8);
-    } else {
-      text(p, "Continued on next page…", L.ref.x, L.ref.y + 42, 8, fontB);
+    // Reference and page info
+    const fRefNumber = getField("refNumber");
+    if (fRefNumber && fRefNumber.visible && inv.invoiceNumber) {
+      drawFieldText(p, fRefNumber, `Ref No.: ${inv.invoiceNumber}`);
     }
+
+    const fPageNumber = getField("pageNumber");
+    if (fPageNumber && fPageNumber.visible && pageCount > 1) {
+      drawFieldText(p, fPageNumber, `Page ${pi + 1} of ${pageCount}`);
+    }
+
+    // Totals on final page
+    if (pi === pageCount - 1) {
+      drawFieldText(p, getField("totalSales"), peso(totals.totalSales));
+      drawFieldText(p, getField("vat"), peso(totals.vat));
+      drawFieldText(p, getField("net"), peso(totals.net));
+      drawFieldText(p, getField("wht"), `(${peso(totals.wht)})`);
+      drawFieldText(p, getField("due"), peso(totals.due), fontB);
+      drawFieldText(p, getField("vatableSales"), peso(totals.net));
+      drawFieldText(p, getField("vatAmount"), peso(totals.vat));
+    }
+
+    // Custom labels or static texts
+    layout.fields
+      .filter((f) => f.type === "customText" && f.visible && f.staticText)
+      .forEach((customF) => {
+        drawFieldText(p, customF, customF.staticText || "");
+      });
   }
+
   return doc.save();
 }

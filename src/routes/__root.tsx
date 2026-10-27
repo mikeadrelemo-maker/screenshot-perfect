@@ -119,7 +119,8 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const nav = "rounded-md px-3 py-1.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground";
+  const nav =
+    "rounded-md px-3 py-1.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground";
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen bg-background">
@@ -130,15 +131,33 @@ function RootComponent() {
                 <FileText className="h-5 w-5" />
               </span>
               <span className="leading-tight">
-                <span className="block text-base font-semibold tracking-tight">SOS Invoice Template Converter</span>
+                <span className="block text-base font-semibold tracking-tight">
+                  SOS Invoice Template Converter
+                </span>
                 <span className="block text-xs text-sidebar-foreground/60">by: Adrian Llano</span>
               </span>
             </Link>
             <nav className="flex gap-1">
-              <Link to="/" className={nav} activeOptions={{ exact: true, includeSearch: false }} activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}>
+              <Link
+                to="/"
+                className={nav}
+                activeOptions={{ exact: true, includeSearch: false }}
+                activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}
+              >
                 Convert
               </Link>
-              <Link to="/history" className={nav} activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}>
+              <Link
+                to="/editor"
+                className={nav}
+                activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}
+              >
+                Print Layout Editor
+              </Link>
+              <Link
+                to="/history"
+                className={nav}
+                activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}
+              >
                 History
               </Link>
             </nav>

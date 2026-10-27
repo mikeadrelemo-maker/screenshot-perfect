@@ -15,7 +15,9 @@ export async function extractInvoiceFromPdf(file: File): Promise<ParseResult> {
   try {
     pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
   } catch {
-    throw new ExtractionError("This file could not be opened as a PDF. It may be damaged or password-protected.");
+    throw new ExtractionError(
+      "This file could not be opened as a PDF. It may be damaged or password-protected.",
+    );
   }
   const page = await pdf.getPage(1);
   const vp = page.getViewport({ scale: 1 });
@@ -32,6 +34,7 @@ export async function extractInvoiceFromPdf(file: File): Promise<ParseResult> {
     );
   }
   const res = parseSosTokens(tokens, file.name);
-  if (pdf.numPages > 1) res.warnings.push(`Only page 1 of ${pdf.numPages} was read — check for missing items.`);
+  if (pdf.numPages > 1)
+    res.warnings.push(`Only page 1 of ${pdf.numPages} was read — check for missing items.`);
   return res;
 }

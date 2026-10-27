@@ -120,5 +120,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
-  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
 }

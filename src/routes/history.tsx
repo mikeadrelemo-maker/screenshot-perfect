@@ -11,9 +11,15 @@ export const Route = createFileRoute("/history")({
   head: () => ({
     meta: [
       { title: "Invoice History — SOS Invoice Template Converter" },
-      { name: "description", content: "Search, reopen and reprint saved Charge and Cash invoices." },
+      {
+        name: "description",
+        content: "Search, reopen and reprint saved Charge and Cash invoices.",
+      },
       { property: "og:title", content: "Invoice History — SOS Invoice Template Converter" },
-      { property: "og:description", content: "Search, reopen and reprint saved Charge and Cash invoices." },
+      {
+        property: "og:description",
+        content: "Search, reopen and reprint saved Charge and Cash invoices.",
+      },
     ],
   }),
   component: HistoryPage,
@@ -34,7 +40,10 @@ function HistoryPage() {
   }, [list]);
 
   const rows = list.filter((i) =>
-    [i.invoiceNumber, i.customer, i.date, i.type, i.salesRep].join(" ").toLowerCase().includes(q.toLowerCase()),
+    [i.invoiceNumber, i.customer, i.date, i.type, i.salesRep]
+      .join(" ")
+      .toLowerCase()
+      .includes(q.toLowerCase()),
   );
 
   return (
@@ -42,11 +51,18 @@ function HistoryPage() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Invoice history</h1>
-          <p className="text-sm text-muted-foreground">Saved in this browser only — cloud storage is not configured.</p>
+          <p className="text-sm text-muted-foreground">
+            Saved in this browser only — cloud storage is not configured.
+          </p>
         </div>
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search number, customer, date…" className="pl-8" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search number, customer, date…"
+            className="pl-8"
+          />
         </div>
       </div>
       <div className="overflow-x-auto rounded-lg border bg-card">
@@ -78,7 +94,11 @@ function HistoryPage() {
                 <tr key={i.id} className="border-t hover:bg-muted/50">
                   <td className="px-4 py-2.5 font-medium">
                     {i.invoiceNumber || "—"}
-                    {isDup && <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground">Duplicate</span>}
+                    {isDup && (
+                      <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground">
+                        Duplicate
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">{i.date}</td>
                   <td className="px-4 py-2.5">{i.customer}</td>
@@ -89,7 +109,9 @@ function HistoryPage() {
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex justify-end gap-1">
                       <Button asChild size="sm" variant="outline">
-                        <Link to="/" search={{ id: i.id }}>Open / Print</Link>
+                        <Link to="/" search={{ id: i.id }}>
+                          Open / Print
+                        </Link>
                       </Button>
                       <Button
                         size="icon"

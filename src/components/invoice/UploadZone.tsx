@@ -28,8 +28,14 @@ export function UploadZone({ onFile, busy }: { onFile: (f: File) => void; busy: 
         over && "border-primary bg-accent",
       )}
     >
-      {busy ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-8 w-8 text-primary" />}
-      <p className="text-sm font-medium">{busy ? "Reading PDF…" : "Drop an SOS invoice PDF here"}</p>
+      {busy ? (
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      ) : (
+        <UploadCloud className="h-8 w-8 text-primary" />
+      )}
+      <p className="text-sm font-medium">
+        {busy ? "Reading PDF…" : "Drop an SOS invoice PDF here"}
+      </p>
       <p className="text-xs text-muted-foreground">or click to choose a file</p>
       <input
         ref={ref}

@@ -36,7 +36,10 @@ export interface Totals {
   due: Decimal;
 }
 
-export function calcTotals(items: Pick<LineItem, "qty" | "unitPrice">[], whtRatePct: string): Totals {
+export function calcTotals(
+  items: Pick<LineItem, "qty" | "unitPrice">[],
+  whtRatePct: string,
+): Totals {
   const totalSales = items.reduce((s, i) => s.add(calcLine(i).amount), new Decimal(0));
   const vat = r2(totalSales.mul(12).div(112));
   const net = totalSales.sub(vat);

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { renderInvoicePdf } from "@/lib/invoice/render";
 import type { InvoiceData } from "@/lib/invoice/types";
+import type { InvoiceLayout } from "@/lib/invoice/layout-types";
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -16,7 +17,13 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export function PdfPreview({ invoice }: { invoice: InvoiceData }) {
+export function PdfPreview({
+  invoice,
+  customLayout,
+}: {
+  invoice: InvoiceData;
+  customLayout?: InvoiceLayout;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(true);
@@ -28,7 +35,7 @@ export function PdfPreview({ invoice }: { invoice: InvoiceData }) {
     setBusy(true);
     const t = setTimeout(async () => {
       try {
-        const bytes = await renderInvoicePdf(invoice);
+        const bytes = await renderInvoicePdf(invoice, customLayout);
         if (cancelled) return;
         const b = new Blob([bytes as BlobPart], { type: "application/pdf" });
         setBlob(b);
@@ -42,14 +49,18 @@ export function PdfPreview({ invoice }: { invoice: InvoiceData }) {
       } finally {
         if (!cancelled) setBusy(false);
       }
-    }, 350);
+    }, 250);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [invoice]);
+  }, [invoice, customLayout]);
 
-  const fileName = `${invoice.type === "charge" ? "Charge" : "Cash"}_Invoice_${invoice.invoiceNumber || "draft"}.pdf`.replace(/[^\w.-]+/g, "_");
+  const fileName =
+    `${invoice.type === "charge" ? "Charge" : "Cash"}_Invoice_${invoice.invoiceNumber || "draft"}.pdf`.replace(
+      /[^\w.-]+/g,
+      "_",
+    );
 
   const print = () => {
     if (!url) return;
@@ -77,21 +88,35 @@ export function PdfPreview({ invoice }: { invoice: InvoiceData }) {
     <div className="flex h-full flex-col rounded-lg border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold">{invoice.type === "charge" ? "Charge Invoice" : "Cash Invoice"} preview</h2>
-          <p className="text-xs text-muted-foreground">Exact PDF output · 8.26 × 10.76 in</p>
+          <h2 className="text-sm font-semibold">
+            {invoice.type === "charge" ? "Charge Invoice" : "Cash Invoice"} preview
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            US Letter PDF output · 8.5 × 11 in (215.9 × 279.4 mm)
+          </p>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={print} disabled={!url || busy}>
             <Printer className="h-4 w-4" /> Print
           </Button>
-          <Button size="sm" onClick={() => blob && downloadBlob(blob, fileName)} disabled={!blob || busy}>
+          <Button
+            size="sm"
+            onClick={() => blob && downloadBlob(blob, fileName)}
+            disabled={!blob || busy}
+          >
             <Download className="h-4 w-4" /> Download PDF
           </Button>
         </div>
       </div>
       <div className="relative min-h-[640px] flex-1 bg-muted">
         {error && <p className="p-6 text-sm text-destructive">PDF generation failed: {error}</p>}
-        {url && !error && <iframe title="Invoice preview" src={`${url}#toolbar=0&view=FitH`} className="absolute inset-0 h-full w-full" />}
+        {url && !error && (
+          <iframe
+            title="Invoice preview"
+            src={`${url}#toolbar=0&view=FitH`}
+            className="absolute inset-0 h-full w-full"
+          />
+        )}
         {busy && (
           <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-card px-2 py-1 text-xs text-muted-foreground shadow">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating

@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Database, FilePlus2, Save } from "lucide-react";
+import { AlertTriangle, Database, FilePlus2, Save, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,15 +9,30 @@ import { InvoiceEditor } from "@/components/invoice/InvoiceEditor";
 import { PdfPreview } from "@/components/invoice/PdfPreview";
 import { emptyInvoice, type InvoiceData, type InvoiceType } from "@/lib/invoice/types";
 import { findDuplicate, loadHistory, saveInvoice } from "@/lib/invoice/history";
+import { loadActiveLayout } from "@/lib/invoice/layout-store";
+import type { InvoiceLayout } from "@/lib/invoice/layout-types";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (s: Record<string, unknown>): { id?: string } => (typeof s['id'] === "string" ? { id: s['id'] } : {}),
+  validateSearch: (s: Record<string, unknown>): { id?: string } =>
+    typeof s["id"] === "string" ? { id: s["id"] } : {},
   head: () => ({
     meta: [
       { title: "Convert SOS Invoice — SOS Invoice Template Converter" },
-      { name: "description", content: "Upload an SOS Inventory PDF, review VAT totals, and print Charge or Cash invoices." },
+      {
+        name: "description",
+        content:
+          "Upload an SOS Inventory PDF, review VAT totals, and print Charge or Cash invoices.",
+      },
       { property: "og:title", content: "SOS Invoice Template Converter" },
-      { property: "og:description", content: "Turn SOS Inventory PDFs into printable Charge and Cash invoices with VAT and withholding tax." },
+      {
+        name: "description",
+        content:
+          "Turn SOS Inventory PDFs into printable Charge and Cash invoices with VAT and withholding tax.",
+      },
+      {
+        name: "author",
+        content: "Adrian Llano",
+      },
     ],
   }),
   component: ConvertPage,
@@ -31,6 +46,7 @@ function ConvertPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dup, setDup] = useState<InvoiceData | undefined>();
+  const [activeLayout, setActiveLayout] = useState<InvoiceLayout>(() => loadActiveLayout("charge"));
 
   useEffect(() => {
     if (!id) return;
@@ -44,6 +60,10 @@ function ConvertPage() {
 
   useEffect(() => setDup(findDuplicate(inv)), [inv.invoiceNumber, inv.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    setActiveLayout(loadActiveLayout(inv.type));
+  }, [inv.type]);
+
   const onFile = async (file: File) => {
     setBusy(true);
     setError(null);
@@ -53,7 +73,8 @@ function ConvertPage() {
       setInv(res.invoice);
       setWarnings(res.warnings);
       navigate({ to: "/", search: {}, replace: true });
-      if (res.invoice.items.length) toast.success(`Read ${res.invoice.items.length} item(s) from ${file.name}`);
+      if (res.invoice.items.length)
+        toast.success(`Read ${res.invoice.items.length} item(s) from ${file.name}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The PDF could not be read.");
     } finally {
@@ -76,12 +97,23 @@ function ConvertPage() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Convert SOS invoice</h1>
-          <p className="text-sm text-muted-foreground">Upload, review the extracted data, then print or download.</p>
+          <p className="text-sm text-muted-foreground">
+            Upload, review the extracted data, then print or download.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground" title="Cloud storage is not configured">
-            <Database className="h-3.5 w-3.5" /> Cloud storage not configured — history is saved in this browser only
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground"
+            title="Cloud storage is not configured"
+          >
+            <Database className="h-3.5 w-3.5" /> Cloud storage not configured — history is saved in
+            this browser only
           </span>
+          <Link to="/editor" search={{ type: inv.type }}>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Sliders className="h-4 w-4" /> Customize Print Layout
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"
@@ -115,7 +147,9 @@ function ConvertPage() {
                     onClick={() => setType(t)}
                     className={cn(
                       "rounded-md border px-3 py-2.5 text-left text-sm font-medium transition-colors",
-                      inv.type === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
+                      inv.type === t
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "hover:bg-accent",
                     )}
                   >
                     {t === "charge" ? "Charge Invoice" : "Cash Invoice"}
@@ -135,7 +169,8 @@ function ConvertPage() {
               {dup && (
                 <p className="flex gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  Invoice number {inv.invoiceNumber} already exists in history ({dup.customer || "no customer"}). Saving will keep both.
+                  Invoice number {inv.invoiceNumber} already exists in history (
+                  {dup.customer || "no customer"}). Saving will keep both.
                 </p>
               )}
               {warnings.map((w) => (
@@ -150,7 +185,7 @@ function ConvertPage() {
         </div>
 
         <div className="2xl:sticky 2xl:top-4 2xl:h-[calc(100vh-2rem)]">
-          <PdfPreview invoice={previewInvoice} />
+          <PdfPreview invoice={previewInvoice} customLayout={activeLayout} />
         </div>
       </div>
     </main>

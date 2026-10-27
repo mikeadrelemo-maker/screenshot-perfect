@@ -38,8 +38,7 @@ function cells(tokens: TextToken[], gap = 14): TextToken[] {
     if (prev && t.x - prevEnd < gap && !t.str.trim().startsWith("₱")) {
       prev.str += (t.x - prevEnd > 1 ? " " : "") + t.str.trim();
       prev.w = t.x + t.w - prev.x;
-    }
-    else out.push({ ...t, str: t.str.trim() });
+    } else out.push({ ...t, str: t.str.trim() });
   }
   return out;
 }
@@ -61,20 +60,42 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
   const dateRe = /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/;
 
   // Date: top-right block
-  const dateLine = lines.find((l) => l.y < 140 && l.tokens.some((t) => t.x > 380 && dateRe.test(t.str)));
+  const dateLine = lines.find(
+    (l) => l.y < 140 && l.tokens.some((t) => t.x > 380 && dateRe.test(t.str)),
+  );
   inv.date = dateLine?.tokens.find((t) => dateRe.test(t.str))?.str.match(dateRe)?.[0] ?? "";
 
   // Bill-to block (left of the TERMS labels)
   const billLines = lines
     .filter((l) => l.y > 130 && l.y < 215)
-    .map((l) => l.tokens.filter((t) => t.x > 120 && t.x < 385).map((t) => t.str).join(" ").trim())
+    .map((l) =>
+      l.tokens
+        .filter((t) => t.x > 120 && t.x < 385)
+        .map((t) => t.str)
+        .join(" ")
+        .trim(),
+    )
     .filter(Boolean);
   inv.customer = clean(billLines[0] ?? "");
   inv.address = clean(billLines.slice(1).join(", "));
 
   const labelValue = (re: RegExp) => {
-    const l = lines.find((l) => l.y < 220 && re.test(l.tokens.filter((t) => t.x >= 385 && t.x < 440).map((t) => t.str).join(" ")));
-    return clean(l?.tokens.filter((t) => t.x >= 430).map((t) => t.str).join(" ") ?? "");
+    const l = lines.find(
+      (l) =>
+        l.y < 220 &&
+        re.test(
+          l.tokens
+            .filter((t) => t.x >= 385 && t.x < 440)
+            .map((t) => t.str)
+            .join(" "),
+        ),
+    );
+    return clean(
+      l?.tokens
+        .filter((t) => t.x >= 430)
+        .map((t) => t.str)
+        .join(" ") ?? "",
+    );
   };
   inv.terms = labelValue(/TERMS/);
   inv.dueDate = labelValue(/DUE\s*DATE/);
@@ -91,17 +112,37 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
     const left = c.slice(0, c.length - 3);
     const first = left[0];
     const item = first && first.x < 105 ? first.str : "";
-    const desc = left.filter((t, i) => !(i === 0 && item)).map((t) => t.str).join(" ");
-    inv.items.push({ id: newId(), item, description: desc, qty: num(qty.str), unitPrice: num(price.str) });
+    const desc = left
+      .filter((t, i) => !(i === 0 && item))
+      .map((t) => t.str)
+      .join(" ");
+    inv.items.push({
+      id: newId(),
+      item,
+      description: desc,
+      qty: num(qty.str),
+      unitPrice: num(price.str),
+    });
   }
 
   // Reference number + sales rep
-  const refLines = lines.filter((l) => l.y > 440 && l.y < 470).map((l) => l.tokens.filter((t) => t.x > 180 && t.x < 400).map((t) => t.str).join(" ").trim()).filter(Boolean);
+  const refLines = lines
+    .filter((l) => l.y > 440 && l.y < 470)
+    .map((l) =>
+      l.tokens
+        .filter((t) => t.x > 180 && t.x < 400)
+        .map((t) => t.str)
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean);
   inv.invoiceNumber = clean(refLines[0] ?? "");
   inv.salesRep = clean(refLines[1] ?? "");
 
   // Source "Total" (top value of the totals column)
-  const totalLine = lines.find((l) => l.y > 465 && l.y < 485 && l.tokens.some((t) => t.x > 480 && isNum(t.str)));
+  const totalLine = lines.find(
+    (l) => l.y > 465 && l.y < 485 && l.tokens.some((t) => t.x > 480 && isNum(t.str)),
+  );
   const tot = totalLine?.tokens.find((t) => t.x > 480 && isNum(t.str));
   if (tot) inv.sourceTotal = num(tot.str);
 
