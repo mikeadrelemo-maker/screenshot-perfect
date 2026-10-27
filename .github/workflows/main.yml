@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: github-pages
   cancel-in-progress: true
 
 jobs:
@@ -36,15 +36,50 @@ jobs:
       - name: Build application
         run: bun run build
 
-      - name: Check build output
+      - name: Locate static website output
+        shell: bash
         run: |
-          echo "Checking generated files..."
-          if [ -d dist ]; then
-            echo "Found dist directory"
-          elif [ -d .output/public ]; then
-            echo "Found .output/public directory"
-          else
-            echo "Build completed but no recognized static output directory was found."
-            echo "Review the build output before configuring deployment."
-            exit 1
+          set -e
+
+          echo "Searching for a static website with index.html..."
+
+          for dir in .output/public dist/client dist public; do
+            if [ -f "$dir/index.html" ]; then
+              echo "Found static website output: $dir"
+              echo "PAGES_DIR=$dir" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+
+          echo "ERROR: No recognized static output containing index.html."
+          echo "Build output directories:"
+          ls -la
+          if [ -d .output ]; then
+            find .output -maxdepth 3 -type f -name index.html
           fi
+          exit 1
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ env.PAGES_DIR }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
