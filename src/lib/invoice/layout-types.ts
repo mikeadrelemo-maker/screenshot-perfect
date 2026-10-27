@@ -843,7 +843,9 @@ export function createDefaultLayout(type: InvoiceType): InvoiceLayout {
       left: 6.0,
       right: 6.0,
     },
-    showBackgroundTemplate: true,
+    // The template background is used for positioning reference in the editor canvas only.
+    // It is never printed or embedded in the exported PDF. Default off for new layouts.
+    showBackgroundTemplate: false,
     backgroundOpacity: 1.0,
     tableConfig: {
       rowTopMm: isCharge ? 81.5 : 86.0,

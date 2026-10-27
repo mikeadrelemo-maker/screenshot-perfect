@@ -75,7 +75,11 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
           ? loaded.marginsMm.right
           : fallback.marginsMm.right,
     },
-    showBackgroundTemplate: loaded.showBackgroundTemplate !== false,
+    // The template background is a positioning guide for the editor only — never for print.
+    // Default to false so existing layouts that were saved with showBackgroundTemplate:true
+    // also produce a clean text-only PDF output. Users can still toggle it on in the editor
+    // canvas for visual alignment purposes.
+    showBackgroundTemplate: loaded.showBackgroundTemplate === true ? true : false,
     backgroundOpacity:
       typeof loaded.backgroundOpacity === "number" &&
       loaded.backgroundOpacity >= 0 &&

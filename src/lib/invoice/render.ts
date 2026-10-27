@@ -13,6 +13,7 @@ import { loadActiveLayout } from "./layout-store";
 
 export const ROWS_PER_PAGE = 10;
 
+// Font asset cache — template background images are never loaded into PDFs.
 const assetCache = new Map<string, Promise<ArrayBuffer>>();
 const loadAsset = (url: string) => {
   if (!assetCache.has(url)) {
@@ -42,7 +43,10 @@ function parseColor(hex: string | undefined, fallback = INK) {
   return fallback;
 }
 
-/** Render a fully customized invoice PDF with Letter dimensions and custom field layouts */
+/** Render a fully customized invoice PDF with Letter dimensions and custom field layouts.
+ *  The final PDF is text-only on a blank page — the scanned template background is never
+ *  embedded or printed. The editor canvas may display the template as a positioning guide,
+ *  but it is intentionally excluded from all print and PDF output. */
 export async function renderInvoicePdf(
   inv: InvoiceData,
   customLayout?: InvoiceLayout,
@@ -54,12 +58,11 @@ export async function renderInvoicePdf(
   doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
-  const [bg, reg, bold] = await Promise.all([
-    loadAsset(`/templates/${inv.type}.jpg`),
+  // Load only fonts — the template background image is intentionally NOT loaded or embedded.
+  const [reg, bold] = await Promise.all([
     loadAsset("/fonts/DejaVuSans.ttf"),
     loadAsset("/fonts/DejaVuSans-Bold.ttf"),
   ]);
-  const img = await doc.embedJpg(bg);
   const font = await doc.embedFont(reg, { subset: true });
   const fontB = await doc.embedFont(bold, { subset: true });
 
@@ -160,31 +163,12 @@ export async function renderInvoicePdf(
   for (let pi = 0; pi < pageCount; pi++) {
     const p = doc.addPage([pageW, pageH]);
 
-    // Optional background template
-    if (layout.showBackgroundTemplate) {
-      p.drawImage(img, {
-        x: 0,
-        y: 0,
-        width: pageW,
-        height: pageH,
-        opacity: layout.backgroundOpacity ?? 1.0,
-      });
-    }
+    // The template background image is intentionally NOT drawn in the PDF.
+    // The output is text-only on a blank Letter-size page.
 
     // Invoice Serial Number
     const fSerial = getField("invoiceNumber");
     if (fSerial && fSerial.visible && inv.invoiceNumber) {
-      const box = toPdfBox(fSerial);
-      // Clean whiteout under serial if template is shown
-      if (layout.showBackgroundTemplate) {
-        p.drawRectangle({
-          x: box.x,
-          y: box.y,
-          width: box.w,
-          height: box.h,
-          color: rgb(1, 1, 1),
-        });
-      }
       drawFieldText(p, fSerial, inv.invoiceNumber, fontB);
     }
 
