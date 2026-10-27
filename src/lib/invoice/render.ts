@@ -51,8 +51,8 @@ const LAYOUTS: Record<InvoiceType, Layout> = {
     tin: { x: 192, y: 232 },
     address: { x: 192, y: 245 },
     side: { x: 560, y: 210, step: 14 },
-    rows: { top: 370, h: 27.1, count: 10 },
-    cols: { item: [46, 151], desc: [157, 580], qty: [584, 649], unit: [653, 737], amount: [742, 824] },
+    rows: { top: 372, h: 27.1, count: 10 },
+    cols: { item: [48, 151], desc: [157, 580], qty: [584, 649], unit: [653, 737], amount: [742, 824] },
     totalsRight: 822,
     totalsY: { total: 694, vat: 725, net: 752, wht: 847, due: 886 },
     leftRight: 289,
@@ -142,7 +142,7 @@ export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
     if (inv.invoiceNumber) {
       let sz = 15;
       while (sz > 8 && font.widthOfTextAtSize(inv.invoiceNumber, sz) > pts(L.serial.w) - 2) sz -= 0.5;
-      text(p, inv.invoiceNumber, L.serial.x + 2, L.serial.y + L.serial.h / 2, sz, font, RED);
+      text(p, inv.invoiceNumber, L.serial.x + 2, L.serial.y + L.serial.h / 2 + 2, sz, font, RED);
     }
 
     text(p, inv.date, L.date.x, L.date.y, 9);
@@ -157,7 +157,7 @@ export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
     side.forEach(([k, v], i) => {
       const y = L.side.y + i * L.side.step;
       text(p, k, L.side.x + 110, y, 6.5, fontB);
-      text(p, v, L.side.x + 175, y, 8);
+      text(p, v, L.side.x + 182, y, 8);
     });
 
     const slice = inv.items.slice(pi * ROWS_PER_PAGE, (pi + 1) * ROWS_PER_PAGE);
@@ -186,7 +186,7 @@ export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
       right(p, peso(totals.net), L.leftRight, L.leftY.vatable, 8);
       right(p, peso(totals.vat), L.leftRight, L.leftY.vatAmount, 8);
     } else {
-      text(p, "Continued on next page…", 600, L.totalsY.due, 9, fontB);
+      text(p, "Continued on next page…", L.ref.x, L.ref.y + 42, 8, fontB);
     }
   }
   return doc.save();
