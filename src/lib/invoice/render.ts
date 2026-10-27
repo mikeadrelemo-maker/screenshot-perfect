@@ -59,9 +59,11 @@ export async function renderInvoicePdf(
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
   // Load only fonts — the template background image is intentionally NOT loaded or embedded.
+  // Use import.meta.env.BASE_URL so the paths work on GitHub Pages (sub-path) and locally (/).
+  const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
   const [reg, bold] = await Promise.all([
-    loadAsset("/fonts/DejaVuSans.ttf"),
-    loadAsset("/fonts/DejaVuSans-Bold.ttf"),
+    loadAsset(`${base}fonts/DejaVuSans.ttf`),
+    loadAsset(`${base}fonts/DejaVuSans-Bold.ttf`),
   ]);
   const font = await doc.embedFont(reg, { subset: true });
   const fontB = await doc.embedFont(bold, { subset: true });

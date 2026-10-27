@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Decode the path redirect from 404.html SPA fallback before any scripts run -->
+    <script>
+      (function () {
+        var qs = window.location.search;
+        if (qs.indexOf('?p=') !== 0 && qs.indexOf('&p=') === -1) return;
+        var params = new URLSearchParams(qs);
+        var p = params.get('p');
+        var h = params.get('h') || '';
+        if (!p) return;
+        var base = '/screenshot-perfect';
+        window.history.replaceState(null, '', base + p + h);
+      })();
+    </script>
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    <title>SOS Invoice Template Converter</title>
+    <meta name="description" content="Convert SOS Inventory PDFs into Charge and Cash invoices. by: Adrian Llano" />
+    <meta name="author" content="Adrian Llano" />
+    <meta property="og:title" content="SOS Invoice Template Converter" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main-csr.tsx"></script>
+  </body>
+</html>

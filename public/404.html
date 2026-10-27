@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOS Invoice Template Converter</title>
+    <!-- SPA routing fallback for GitHub Pages.
+         When a user navigates directly to /screenshot-perfect/editor or /screenshot-perfect/history,
+         GitHub Pages serves this 404.html. This script redirects them to the root index.html
+         with the intended path encoded as a query parameter, which index.html decodes on load
+         and replaces the URL via history.replaceState before the router boots. -->
+    <script>
+      (function () {
+        var base = '/screenshot-perfect';
+        var path = window.location.pathname;
+        // Strip the base and encode the path segment as a query param
+        var stripped = path.startsWith(base) ? path.slice(base.length) : path;
+        var search = window.location.search;
+        var hash = window.location.hash;
+        var redirect =
+          base +
+          '/?p=' +
+          encodeURIComponent(stripped + search) +
+          (hash ? '&h=' + encodeURIComponent(hash) : '');
+        window.location.replace(redirect);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

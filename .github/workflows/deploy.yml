@@ -1,0 +1,64 @@
+# Deploy SOS Invoice Template Converter to GitHub Pages
+# Builds the pure-CSR static SPA (vite.pages.config.ts) and publishes dist/ to GitHub Pages.
+# Runs on every push to main. Does NOT use Lovable's Publish feature.
+#
+# To enable after pushing this file:
+#   Repository Settings → Pages → Source → GitHub Actions
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual trigger
+
+# Only one deployment at a time; cancel any in-progress run on the same branch.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (GitHub Pages / CSR)
+        run: npm run build:pages
+        env:
+          # Vite reads BASE_URL from base in vite.pages.config.ts;
+          # this env var is a belt-and-suspenders hint for any runtime code.
+          VITE_BASE_URL: /screenshot-perfect/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

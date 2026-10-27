@@ -232,7 +232,7 @@ export function LayoutCanvas({
         {/* Optional Scanned Template Background */}
         {layout.showBackgroundTemplate && (
           <img
-            src={`/templates/${layout.invoiceType}.jpg`}
+            src={`${import.meta.env.BASE_URL}templates/${layout.invoiceType}.jpg`}
             alt={`${layout.invoiceType} invoice template background`}
             className="pointer-events-none absolute inset-0 h-full w-full object-fill"
             style={{ opacity: layout.backgroundOpacity }}
