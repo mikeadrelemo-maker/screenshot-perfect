@@ -11,7 +11,7 @@ import { emptyInvoice, type InvoiceData, type InvoiceType } from "@/lib/invoice/
 import { findDuplicate, loadHistory, saveInvoice } from "@/lib/invoice/history";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (s: Record<string, unknown>): { id?: string } => (typeof s.id === "string" ? { id: s.id } : {}),
+  validateSearch: (s: Record<string, unknown>): { id?: string } => (typeof s['id'] === "string" ? { id: s['id'] } : {}),
   head: () => ({
     meta: [
       { title: "Convert SOS Invoice — SOS Invoice Template Converter" },
