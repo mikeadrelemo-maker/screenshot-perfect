@@ -100,7 +100,7 @@ function ConvertPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[1fr_260px]">
             <UploadZone onFile={onFile} busy={busy} />
@@ -149,7 +149,7 @@ function ConvertPage() {
           <InvoiceEditor value={inv} onChange={setInv} />
         </div>
 
-        <div className="xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]">
+        <div className="2xl:sticky 2xl:top-4 2xl:h-[calc(100vh-2rem)]">
           <PdfPreview invoice={previewInvoice} />
         </div>
       </div>
