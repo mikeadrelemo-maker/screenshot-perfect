@@ -9,9 +9,11 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { FileText } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -78,21 +80,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "SOS Invoice Template Converter" },
+      { name: "description", content: "Convert SOS Inventory PDFs into Charge and Cash invoices." },
+      { name: "author", content: "Adrian Llano" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: appCss,
+        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
   shellComponent: RootShell,
@@ -117,11 +119,34 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
+  const nav = "rounded-md px-3 py-1.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground";
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <div className="min-h-screen bg-background">
+        <header className="bg-navy-deep text-sidebar-foreground">
+          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <Link to="/" className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-md bg-sidebar-foreground text-navy-deep">
+                <FileText className="h-5 w-5" />
+              </span>
+              <span className="leading-tight">
+                <span className="block text-base font-semibold tracking-tight">SOS Invoice Template Converter</span>
+                <span className="block text-xs text-sidebar-foreground/60">by: Adrian Llano</span>
+              </span>
+            </Link>
+            <nav className="flex gap-1">
+              <Link to="/" className={nav} activeOptions={{ exact: true, includeSearch: false }} activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}>
+                Convert
+              </Link>
+              <Link to="/history" className={nav} activeProps={{ className: "bg-sidebar-accent !text-sidebar-foreground" }}>
+                History
+              </Link>
+            </nav>
+          </div>
+        </header>
+        <Outlet />
+      </div>
+      <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
 }
