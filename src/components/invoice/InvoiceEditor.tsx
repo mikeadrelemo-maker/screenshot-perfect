@@ -18,7 +18,7 @@ function Field({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  flag?: string;
+  flag?: string | undefined;
   placeholder?: string;
   className?: string;
 }) {

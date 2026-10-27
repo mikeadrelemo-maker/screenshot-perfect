@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { calcLine, calcTotals, peso } from "./calc";
 
-const igacos = [{ qty: "17", unitPrice: "3545.98225" }];
+const igacos: { qty: string; unitPrice: string }[] = [{ qty: "17", unitPrice: "3545.98225" }];
 
 describe("VAT calculations", () => {
   it("VAT-inclusive unit price is original × 1.12", () => {
-    expect(peso(calcLine(igacos[0]).vatUnit)).toBe("₱3,971.50");
+    expect(peso(calcLine(igacos[0]!).vatUnit)).toBe("₱3,971.50");
   });
   it("line amount is VAT unit price × qty", () => {
-    expect(peso(calcLine(igacos[0]).amount)).toBe("₱67,515.50");
+    expect(peso(calcLine(igacos[0]!).amount)).toBe("₱67,515.50");
   });
   it("mandatory Igacos totals", () => {
     const t = calcTotals(igacos, "1");

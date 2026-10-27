@@ -49,6 +49,6 @@ export function calcTotals(items: Pick<LineItem, "qty" | "unitPrice">[], whtRate
 export function peso(d: Decimal | null | undefined): string {
   if (!d) return "";
   const neg = d.isNegative();
-  const [int, frac] = d.abs().toFixed(2).split(".");
+  const [int = "0", frac = "00"] = d.abs().toFixed(2).split(".");
   return `${neg ? "-" : ""}₱${int.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${frac}`;
 }

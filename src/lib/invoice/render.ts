@@ -153,7 +153,7 @@ export async function renderInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
       ["TERMS", inv.terms],
       ["DUE DATE", inv.dueDate],
       ["PO NUMBER", inv.poNumber],
-    ].filter(([, v]) => v);
+    ].filter(([, v]) => v) as [string, string][];
     side.forEach(([k, v], i) => {
       const y = L.side.y + i * L.side.step;
       text(p, k, L.side.x + 110, y, 6.5, fontB);

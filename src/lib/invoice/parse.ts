@@ -84,12 +84,13 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
   for (const l of lines.filter((l) => l.y > 220 && l.y < 440)) {
     const c = cells(l.tokens);
     if (c.length < 4) continue;
-    const amount = c[c.length - 1];
-    const price = c[c.length - 2];
-    const qty = c[c.length - 3];
+    const amount = c[c.length - 1]!;
+    const price = c[c.length - 2]!;
+    const qty = c[c.length - 3]!;
     if (!isNum(amount.str) || !isNum(price.str) || !isNum(qty.str)) continue;
     const left = c.slice(0, c.length - 3);
-    const item = left[0]?.x < 105 ? left[0].str : "";
+    const first = left[0];
+    const item = first && first.x < 105 ? first.str : "";
     const desc = left.filter((t, i) => !(i === 0 && item)).map((t) => t.str).join(" ");
     inv.items.push({ id: newId(), item, description: desc, qty: num(qty.str), unitPrice: num(price.str) });
   }
