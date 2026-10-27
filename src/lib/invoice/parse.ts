@@ -4,6 +4,7 @@ export interface TextToken {
   str: string;
   x: number; // from left, pt
   y: number; // from top, pt
+  w: number; // width, pt
 }
 
 interface Line {
@@ -33,8 +34,11 @@ function cells(tokens: TextToken[], gap = 14): TextToken[] {
   const out: TextToken[] = [];
   for (const t of tokens) {
     const prev = out[out.length - 1];
-    const prevEnd = prev ? prev.x + prev.str.length * 4.2 : -999;
-    if (prev && t.x - prevEnd < gap && !t.str.startsWith("₱")) prev.str += " " + t.str.trim();
+    const prevEnd = prev ? prev.x + prev.w : -999;
+    if (prev && t.x - prevEnd < gap && !t.str.trim().startsWith("₱")) {
+      prev.str += (t.x - prevEnd > 1 ? " " : "") + t.str.trim();
+      prev.w = t.x + t.w - prev.x;
+    }
     else out.push({ ...t, str: t.str.trim() });
   }
   return out;
