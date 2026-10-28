@@ -33,20 +33,26 @@ export interface Totals {
   vat: Decimal;
   net: Decimal;
   wht: Decimal;
+  wht2: Decimal;
   due: Decimal;
 }
 
 export function calcTotals(
   items: Pick<LineItem, "qty" | "unitPrice">[],
   whtRatePct: string,
+  whtRatePct2 = "5",
+  enabled = true,
+  enabled2 = true,
 ): Totals {
   const totalSales = items.reduce((s, i) => s.add(calcLine(i).amount), new Decimal(0));
   const vat = r2(totalSales.mul(12).div(112));
   const net = totalSales.sub(vat);
   const rate = toDec(whtRatePct) ?? new Decimal(0);
-  const wht = r2(net.mul(rate).div(100));
-  const due = totalSales.sub(wht);
-  return { totalSales, vat, net, wht, due };
+  const rate2 = toDec(whtRatePct2) ?? new Decimal(0);
+  const wht = enabled ? r2(totalSales.mul(rate).div(100)) : new Decimal(0);
+  const wht2 = enabled2 ? r2(totalSales.mul(rate2).div(100)) : new Decimal(0);
+  const due = totalSales.sub(wht).sub(wht2);
+  return { totalSales, vat, net, wht, wht2, due };
 }
 
 export function peso(d: Decimal | null | undefined): string {

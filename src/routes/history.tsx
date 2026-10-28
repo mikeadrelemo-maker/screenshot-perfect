@@ -10,6 +10,8 @@ import type { InvoiceData } from "@/lib/invoice/types";
 export const Route = createFileRoute("/history")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Invoice History — SOS Invoice Template Converter" },
       {
         name: "description",
@@ -88,7 +90,7 @@ function HistoryPage() {
               </tr>
             )}
             {rows.map((i) => {
-              const t = calcTotals(i.items, i.whtRate);
+              const t = calcTotals(i.items, i.whtRate, i.whtRate2, i.whtEnabled, i.whtEnabled2);
               const isDup = (counts.get(i.invoiceNumber.trim().toLowerCase()) ?? 0) > 1;
               return (
                 <tr key={i.id} className="border-t hover:bg-muted/50">

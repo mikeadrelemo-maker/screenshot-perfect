@@ -21,6 +21,10 @@ export interface InvoiceData {
   poNumber: string;
   salesRep: string;
   whtRate: string; // percent, default "1"
+  whtRate2?: string;
+  whtEnabled?: boolean;
+  whtEnabled2?: boolean;
+  sourceInvoiceNumber?: string;
   items: LineItem[];
   sourceFile?: string;
   sourceTotal?: string; // total printed on the source PDF, for cross-checking
@@ -47,6 +51,9 @@ export function emptyInvoice(type: InvoiceType = "charge"): InvoiceData {
     poNumber: "",
     salesRep: "",
     whtRate: "1",
+    whtRate2: "5",
+    whtEnabled: true,
+    whtEnabled2: true,
     items: [],
     status: "draft",
     updatedAt: new Date().toISOString(),
