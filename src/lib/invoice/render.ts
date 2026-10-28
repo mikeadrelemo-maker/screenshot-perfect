@@ -253,8 +253,25 @@ export async function renderInvoicePdf(
       drawFieldText(p, getField("totalSales"), peso(totals.totalSales));
       drawFieldText(p, getField("vat"), peso(totals.vat));
       drawFieldText(p, getField("net"), peso(totals.net));
-      drawFieldText(p, getField("wht"), `Tax 1 (${inv.whtRate}%): (${peso(totals.wht)})`);
-      drawFieldText(p, getField("wht2"), `Tax 2 (${inv.whtRate2 ?? "5"}%): (${peso(totals.wht2)})`);
+      // Withholding Tax 1: Print ONLY percentage in designated label area
+      if (totals.wht1Enabled) {
+        const rate1 = inv.wht1Rate ?? inv.whtRate ?? "1";
+        const rate1Str = `${rate1}%`;
+        drawFieldText(p, getField("whtRate") || getField("wht1Rate"), rate1Str);
+        if (totals.wht1.gt(0)) {
+          drawFieldText(p, getField("wht1") || getField("wht"), `(${peso(totals.wht1)})`);
+        }
+      }
+
+      // Withholding Tax 2: Print ONLY percentage in designated label area
+      if (totals.wht2Enabled) {
+        const rate2 = inv.wht2Rate ?? inv.whtRate2 ?? "5";
+        const rate2Str = `${rate2}%`;
+        drawFieldText(p, getField("whtRate2") || getField("wht2Rate"), rate2Str);
+        if (totals.wht2.gt(0)) {
+          drawFieldText(p, getField("wht2"), `(${peso(totals.wht2)})`);
+        }
+      }
       drawFieldText(p, getField("due"), peso(totals.due), true);
       drawFieldText(p, getField("vatableSales"), peso(totals.net));
       drawFieldText(p, getField("vatAmount"), peso(totals.vat));

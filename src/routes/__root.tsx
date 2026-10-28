@@ -14,6 +14,7 @@ import { FileText } from "lucide-react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
+import { LicenseStatusBadge } from "@/components/license/LicenseStatusBadge";
 
 function NotFoundComponent() {
   return (
@@ -137,7 +138,7 @@ function RootComponent() {
                 <span className="block text-xs text-sidebar-foreground/60">by: Adrian Llano</span>
               </span>
             </Link>
-            <nav className="flex gap-1">
+            <nav className="flex items-center gap-1.5">
               <Link
                 to="/"
                 className={nav}
@@ -160,6 +161,9 @@ function RootComponent() {
               >
                 History
               </Link>
+              <div className="ml-2 pl-2 border-l border-sidebar-foreground/20">
+                <LicenseStatusBadge />
+              </div>
             </nav>
           </div>
         </header>

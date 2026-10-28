@@ -7,16 +7,22 @@ import {
 } from "./layout-types";
 import type { InvoiceType } from "./types";
 
-const KEY_CHARGE = "sos_invoice_layout_charge";
-const KEY_CASH = "sos_invoice_layout_cash";
-const KEY_PRESETS = "sos_invoice_layout_presets";
+export const KEY_CHARGE_V1 = "sos_invoice_layout_charge_v1";
+export const KEY_CASH_V1 = "sos_invoice_layout_cash_v1";
+export const KEY_CHARGE_LEGACY = "sos_invoice_layout_charge";
+export const KEY_CASH_LEGACY = "sos_invoice_layout_cash";
+export const KEY_PRESETS = "sos_invoice_layout_presets";
 
-function storageKeyForType(type: InvoiceType): string {
-  return type === "charge" ? KEY_CHARGE : KEY_CASH;
+export function storageKeyForType(type: InvoiceType): string {
+  return type === "charge" ? KEY_CHARGE_V1 : KEY_CASH_V1;
+}
+
+export function legacyStorageKeyForType(type: InvoiceType): string {
+  return type === "charge" ? KEY_CHARGE_LEGACY : KEY_CASH_LEGACY;
 }
 
 /** Sanitize and reconcile a loaded layout against defaults to ensure no fields are missing */
-function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): InvoiceLayout {
+export function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): InvoiceLayout {
   if (!loaded || typeof loaded !== "object" || Array.isArray(loaded))
     throw new Error("Layout must be an object.");
   const fallback = createDefaultLayout(type);
@@ -45,10 +51,12 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
           y: Math.min(finite(f.y, base?.y ?? 10, 0, pageH), pageH - h),
           w,
           h,
-          fontFamily: f.fontFamily === "DejaVu Sans" ? "DejaVu Sans" : "Liberation Serif",
+          fontFamily:
+            f.fontFamily === "DejaVu Sans" || f.fontFamily === "Times New Roman" || f.fontFamily === "Liberation Serif"
+              ? f.fontFamily
+              : (base?.fontFamily ?? "Liberation Serif"),
           fontSize: finite(f.fontSize, 8, 4, 72),
           fontWeight: f.fontWeight === "bold" ? "bold" : "normal",
-          fontFamily: typeof f.fontFamily === "string" ? f.fontFamily : "Times New Roman",
           align: f.align === "center" || f.align === "right" ? f.align : "left",
           color:
             typeof f.color === "string" && /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : "#0d1329",
@@ -87,9 +95,6 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
       right: finite(loaded.marginsMm?.right, fallback.marginsMm.right, 0, 100),
     },
     // The template background is a positioning guide for the editor only — never for print.
-    // Default to false so existing layouts that were saved with showBackgroundTemplate:true
-    // also produce a clean text-only PDF output. Users can still toggle it on in the editor
-    // canvas for visual alignment purposes.
     showBackgroundTemplate: loaded.showBackgroundTemplate === true ? true : false,
     backgroundOpacity:
       typeof loaded.backgroundOpacity === "number" &&
@@ -112,11 +117,16 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
 
 /** Load the active layout for a given invoice type */
 export function loadActiveLayout(type: InvoiceType): InvoiceLayout {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !window.localStorage) {
     return createDefaultLayout(type);
   }
   try {
-    const raw = localStorage.getItem(storageKeyForType(type));
+    // 1. Try versioned key first
+    let raw = localStorage.getItem(storageKeyForType(type));
+    // 2. Fallback to legacy key if versioned key not yet set
+    if (!raw) {
+      raw = localStorage.getItem(legacyStorageKeyForType(type));
+    }
     if (!raw) return createDefaultLayout(type);
     const parsed = JSON.parse(raw);
     return reconcileLayout(parsed, type);
@@ -128,10 +138,14 @@ export function loadActiveLayout(type: InvoiceType): InvoiceLayout {
 
 /** Save the active layout for a given invoice type */
 export function saveActiveLayout(layout: InvoiceLayout): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !window.localStorage) return;
   const updated = { ...layout, updatedAt: new Date().toISOString() };
   try {
-    localStorage.setItem(storageKeyForType(layout.invoiceType), JSON.stringify(updated));
+    const serialized = JSON.stringify(updated);
+    // Write to versioned key
+    localStorage.setItem(storageKeyForType(layout.invoiceType), serialized);
+    // Also mirror to legacy key for backwards compatibility
+    localStorage.setItem(legacyStorageKeyForType(layout.invoiceType), serialized);
   } catch {
     throw new Error(
       "Layout could not be saved in this browser. Storage may be full or disabled; export the layout to keep a copy.",
@@ -170,7 +184,7 @@ export interface LayoutPreset {
 
 /** Load all user-saved presets */
 export function loadPresets(): LayoutPreset[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined" || !window.localStorage) return [];
   try {
     const raw = localStorage.getItem(KEY_PRESETS);
     if (!raw) return [];

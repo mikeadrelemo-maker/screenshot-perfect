@@ -14,7 +14,7 @@ import {
   loadPresets,
 } from "./layout-store";
 import { calcTotals, peso } from "./calc";
-import type { LineItem } from "./types";
+import type { LineItem, InvoiceData } from "./types";
 
 describe("Invoice Layout System & Print Specifications", () => {
   beforeEach(() => {
@@ -70,6 +70,8 @@ describe("Invoice Layout System & Print Specifications", () => {
     expect(fieldTypes).toContain("net");
     expect(fieldTypes).toContain("wht1");
     expect(fieldTypes).toContain("wht2");
+    expect(fieldTypes).toContain("whtRate");
+    expect(fieldTypes).toContain("whtRate2");
     expect(fieldTypes).toContain("due");
   });
 
@@ -124,6 +126,58 @@ describe("Invoice Layout System & Print Specifications", () => {
     const restored = restoreDefaultLayout("charge");
     const restoredFirst = restored.fields.find((f) => f.id === customField.id)!;
     expect(restoredFirst.x).toBe(initial.fields[0]!.x);
+  });
+
+  it("persists saved layouts when opening different invoices or refreshing", () => {
+    // 1. Customize and save Charge layout
+    const chargeLayout = loadActiveLayout("charge");
+    const customChargeCustomer = {
+      ...chargeLayout.fields.find((f) => f.type === "customer")!,
+      x: 55.5,
+      y: 66.5,
+      fontSize: 14,
+    };
+    saveActiveLayout({
+      ...chargeLayout,
+      fields: chargeLayout.fields.map((f) =>
+        f.id === customChargeCustomer.id ? customChargeCustomer : f,
+      ),
+    });
+
+    // 2. Customize and save Cash layout
+    const cashLayout = loadActiveLayout("cash");
+    const customCashCustomer = {
+      ...cashLayout.fields.find((f) => f.type === "customer")!,
+      x: 44.2,
+      y: 77.8,
+      fontSize: 11,
+    };
+    saveActiveLayout({
+      ...cashLayout,
+      fields: cashLayout.fields.map((f) =>
+        f.id === customCashCustomer.id ? customCashCustomer : f,
+      ),
+    });
+
+    // 3. Simulate opening Invoice A (Charge)
+    const activeCharge = loadActiveLayout("charge");
+    const chargeCustField = activeCharge.fields.find((f) => f.type === "customer")!;
+    expect(chargeCustField.x).toBe(55.5);
+    expect(chargeCustField.y).toBe(66.5);
+    expect(chargeCustField.fontSize).toBe(14);
+
+    // 4. Simulate opening Invoice B (Cash)
+    const activeCash = loadActiveLayout("cash");
+    const cashCustField = activeCash.fields.find((f) => f.type === "customer")!;
+    expect(cashCustField.x).toBe(44.2);
+    expect(cashCustField.y).toBe(77.8);
+    expect(cashCustField.fontSize).toBe(11);
+
+    // 5. Simulate opening Invoice C (another Charge invoice) - layout remains intact
+    const activeChargeAgain = loadActiveLayout("charge");
+    const chargeCustAgain = activeChargeAgain.fields.find((f) => f.type === "customer")!;
+    expect(chargeCustAgain.x).toBe(55.5);
+    expect(chargeCustAgain.y).toBe(66.5);
   });
 
   it("saves and manages custom layout presets", () => {

@@ -302,7 +302,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
                   </div>
                 </div>
                 <span className="num text-destructive">
-                  ({peso(tax === 1 ? totals.wht : totals.wht2)})
+                  ({peso(tax === 1 ? totals.wht1 : totals.wht2)})
                 </span>
               </div>
             );

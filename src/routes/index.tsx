@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Database, FilePlus2, Save, Sliders } from "lucide-react";
+import { AlertTriangle, Database, FilePlus2, KeyRound, Save, ShieldAlert, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,9 @@ import { emptyInvoice, type InvoiceData, type InvoiceType } from "@/lib/invoice/
 import { findDuplicate, loadHistory, saveInvoice } from "@/lib/invoice/history";
 import { loadActiveLayout } from "@/lib/invoice/layout-store";
 import { createDefaultLayout, type InvoiceLayout } from "@/lib/invoice/layout-types";
+import { evaluateCurrentLicense, verifyActiveLicense } from "@/lib/license/store";
+import type { LicenseStatus } from "@/lib/license/types";
+import { LicenseDialog } from "@/components/license/LicenseDialog";
 
 export const Route = createFileRoute("/")({
   validateSearch: (s: Record<string, unknown>): { id?: string } =>
@@ -51,6 +54,25 @@ function ConvertPage() {
   const [activeLayout, setActiveLayout] = useState<InvoiceLayout>(() =>
     createDefaultLayout("charge"),
   );
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>(() => evaluateCurrentLicense());
+  const [licenseDialogOpen, setLicenseDialogOpen] = useState(false);
+
+  useEffect(() => {
+    void verifyActiveLicense().then(setLicenseStatus);
+
+    const onLicenseUpdate = () => {
+      setLicenseStatus(evaluateCurrentLicense());
+    };
+
+    window.addEventListener("focus", onLicenseUpdate);
+    window.addEventListener("visibilitychange", onLicenseUpdate);
+    window.addEventListener("sos-license-changed", onLicenseUpdate);
+    return () => {
+      window.removeEventListener("focus", onLicenseUpdate);
+      window.removeEventListener("visibilitychange", onLicenseUpdate);
+      window.removeEventListener("sos-license-changed", onLicenseUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -69,6 +91,16 @@ function ConvertPage() {
   }, [inv.type]);
 
   const onFile = async (file: File) => {
+    if (!licenseStatus.isValid) {
+      toast.error(
+        licenseStatus.type === "expired"
+          ? "Your license has expired. Please reactivate your license to convert invoices."
+          : "A valid license is required to convert invoices. Please activate your license.",
+      );
+      setLicenseDialogOpen(true);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -90,6 +122,16 @@ function ConvertPage() {
   const previewInvoice = useMemo(() => inv, [inv]);
 
   const save = () => {
+    if (!licenseStatus.isValid) {
+      toast.error(
+        licenseStatus.type === "expired"
+          ? "Your license has expired. Please reactivate your license to save invoices."
+          : "A valid license is required to save invoices. Please activate your license.",
+      );
+      setLicenseDialogOpen(true);
+      return;
+    }
+
     const saved = saveInvoice(inv);
     setInv(saved);
     navigate({ to: "/", search: { id: saved.id }, replace: true });
@@ -98,6 +140,47 @@ function ConvertPage() {
 
   return (
     <main className="mx-auto max-w-[1500px] px-5 py-6">
+      {/* License Warning Banner if Unlicensed or Expired */}
+      {!licenseStatus.isValid && (
+        <div
+          className={cn(
+            "mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 shadow-sm",
+            licenseStatus.type === "expired"
+              ? "border-destructive/40 bg-destructive/10 text-destructive dark:bg-destructive/20"
+              : "border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+          )}
+        >
+          <div className="flex items-center gap-3">
+            {licenseStatus.type === "expired" ? (
+              <ShieldAlert className="h-5 w-5 shrink-0 text-destructive" />
+            ) : (
+              <KeyRound className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            )}
+            <div>
+              <p className="text-sm font-semibold">
+                {licenseStatus.type === "expired"
+                  ? "License Expired"
+                  : "License Activation Required"}
+              </p>
+              <p className="text-xs opacity-90">
+                {licenseStatus.type === "expired"
+                  ? licenseStatus.message
+                  : "A valid license is required to convert, download, print, and save invoices. Saved data and layouts remain safe."}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant={licenseStatus.type === "expired" ? "destructive" : "default"}
+            onClick={() => setLicenseDialogOpen(true)}
+            className="shrink-0"
+          >
+            <KeyRound className="mr-1.5 h-4 w-4" />
+            {licenseStatus.type === "expired" ? "Reactivate License" : "Activate License"}
+          </Button>
+        </div>
+      )}
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Convert SOS invoice</h1>
@@ -189,9 +272,20 @@ function ConvertPage() {
         </div>
 
         <div className="2xl:sticky 2xl:top-4 2xl:h-[calc(100vh-2rem)]">
-          <PdfPreview invoice={previewInvoice} customLayout={activeLayout} />
+          <PdfPreview
+            invoice={previewInvoice}
+            customLayout={activeLayout}
+            isLicensed={licenseStatus.isValid}
+            onOpenLicense={() => setLicenseDialogOpen(true)}
+          />
         </div>
       </div>
+
+      <LicenseDialog
+        open={licenseDialogOpen}
+        onOpenChange={setLicenseDialogOpen}
+        onLicenseChanged={setLicenseStatus}
+      />
     </main>
   );
 }
