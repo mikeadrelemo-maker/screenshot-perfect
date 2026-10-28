@@ -8,7 +8,6 @@ import {
   ZoomOut,
   Maximize2,
   Grid,
-  FileCode,
   Upload,
   Eye,
   FileText,
@@ -252,7 +251,7 @@ export function LayoutToolbar({
           onClick={onRestoreDefault}
           title="Restore factory default coordinates and layout"
         >
-          Restore Defaults
+          Reset to Default Layout
         </Button>
 
         <Button

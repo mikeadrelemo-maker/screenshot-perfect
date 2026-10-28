@@ -10,13 +10,15 @@ import { PdfPreview } from "@/components/invoice/PdfPreview";
 import { emptyInvoice, type InvoiceData, type InvoiceType } from "@/lib/invoice/types";
 import { findDuplicate, loadHistory, saveInvoice } from "@/lib/invoice/history";
 import { loadActiveLayout } from "@/lib/invoice/layout-store";
-import type { InvoiceLayout } from "@/lib/invoice/layout-types";
+import { createDefaultLayout, type InvoiceLayout } from "@/lib/invoice/layout-types";
 
 export const Route = createFileRoute("/")({
   validateSearch: (s: Record<string, unknown>): { id?: string } =>
     typeof s["id"] === "string" ? { id: s["id"] } : {},
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Convert SOS Invoice — SOS Invoice Template Converter" },
       {
         name: "description",
@@ -25,7 +27,7 @@ export const Route = createFileRoute("/")({
       },
       { property: "og:title", content: "SOS Invoice Template Converter" },
       {
-        name: "description",
+        property: "og:description",
         content:
           "Turn SOS Inventory PDFs into printable Charge and Cash invoices with VAT and withholding tax.",
       },
@@ -46,7 +48,9 @@ function ConvertPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dup, setDup] = useState<InvoiceData | undefined>();
-  const [activeLayout, setActiveLayout] = useState<InvoiceLayout>(() => loadActiveLayout("charge"));
+  const [activeLayout, setActiveLayout] = useState<InvoiceLayout>(() =>
+    createDefaultLayout("charge"),
+  );
 
   useEffect(() => {
     if (!id) return;

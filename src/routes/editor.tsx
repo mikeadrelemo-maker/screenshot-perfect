@@ -7,13 +7,19 @@ export const Route = createFileRoute("/editor")({
   }),
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Invoice Print Layout Editor — SOS Invoice Template Converter" },
       {
         name: "description",
         content:
           "Customize print and PDF layouts for Charge and Cash invoices with drag-and-drop field positioning.",
       },
-      { property: "og:title", content: "Invoice Print Layout Editor" },
+      { property: "og:title", content: "SOS Invoice Print Layout Editor" },
+      {
+        property: "og:description",
+        content: "Customize and save Charge and Cash invoice print layouts in this browser.",
+      },
       {
         name: "author",
         content: "Adrian Llano",

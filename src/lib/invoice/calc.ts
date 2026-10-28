@@ -28,12 +28,13 @@ export function calcLine(item: Pick<LineItem, "qty" | "unitPrice">): LineCalc {
   return { vatUnit, amount: r2(vatUnit.mul(qty)), valid: true };
 }
 
-export interface WhtOptions {
-  wht1Rate?: string | number | Decimal;
-  wht1Enabled?: boolean;
-  wht2Rate?: string | number | Decimal;
-  wht2Enabled?: boolean;
-  legacyWhtRate?: string | number | Decimal;
+export interface Totals {
+  totalSales: Decimal;
+  vat: Decimal;
+  net: Decimal;
+  wht: Decimal;
+  wht2: Decimal;
+  due: Decimal;
 }
 
 export interface Totals {
@@ -61,66 +62,20 @@ export interface Totals {
  */
 export function calcTotals(
   items: Pick<LineItem, "qty" | "unitPrice">[],
-  whtInput?: string | WhtOptions | Partial<InvoiceData>,
-  optionalWht2Rate?: string | number,
+  whtRatePct: string,
+  whtRatePct2 = "5",
+  enabled = true,
+  enabled2 = true,
 ): Totals {
   const totalSales = items.reduce((s, i) => s.add(calcLine(i).amount), new Decimal(0));
   const vat = r2(totalSales.mul(12).div(112));
   const net = totalSales.sub(vat);
-
-  let wht1RateStr = "1";
-  let wht1Enabled = true;
-  let wht2RateStr = "5";
-  let wht2Enabled = false;
-
-  if (typeof whtInput === "string") {
-    wht1RateStr = whtInput;
-    wht1Enabled = true;
-    if (optionalWht2Rate !== undefined) {
-      wht2RateStr = String(optionalWht2Rate);
-      wht2Enabled = true;
-    }
-  } else if (whtInput && typeof whtInput === "object") {
-    if ("wht1Rate" in whtInput && whtInput.wht1Rate !== undefined) {
-      wht1RateStr = String(whtInput.wht1Rate);
-    } else if ("whtRate" in whtInput && whtInput.whtRate !== undefined) {
-      wht1RateStr = String(whtInput.whtRate);
-    }
-    if ("wht1Enabled" in whtInput && whtInput.wht1Enabled !== undefined) {
-      wht1Enabled = Boolean(whtInput.wht1Enabled);
-    }
-    if ("wht2Rate" in whtInput && whtInput.wht2Rate !== undefined) {
-      wht2RateStr = String(whtInput.wht2Rate);
-    }
-    if ("wht2Enabled" in whtInput && whtInput.wht2Enabled !== undefined) {
-      wht2Enabled = Boolean(whtInput.wht2Enabled);
-    }
-  }
-
-  const dRate1 = toDec(wht1RateStr) ?? new Decimal(0);
-  const dRate2 = toDec(wht2RateStr) ?? new Decimal(0);
-
-  // Calculate each withholding tax independently using VAT-inclusive sales as base
-  const wht1 = wht1Enabled && dRate1.gt(0) ? r2(totalSales.mul(dRate1).div(100)) : new Decimal(0);
-  const wht2 = wht2Enabled && dRate2.gt(0) ? r2(totalSales.mul(dRate2).div(100)) : new Decimal(0);
-
-  const whtTotal = wht1.add(wht2);
-  const due = totalSales.sub(whtTotal);
-
-  return {
-    totalSales,
-    vat,
-    net,
-    wht1,
-    wht2,
-    whtTotal,
-    wht: whtTotal,
-    wht1Rate: dRate1,
-    wht2Rate: dRate2,
-    wht1Enabled,
-    wht2Enabled,
-    due,
-  };
+  const rate = toDec(whtRatePct) ?? new Decimal(0);
+  const rate2 = toDec(whtRatePct2) ?? new Decimal(0);
+  const wht = enabled ? r2(totalSales.mul(rate).div(100)) : new Decimal(0);
+  const wht2 = enabled2 ? r2(totalSales.mul(rate2).div(100)) : new Decimal(0);
+  const due = totalSales.sub(wht).sub(wht2);
+  return { totalSales, vat, net, wht, wht2, due };
 }
 
 export function peso(d: Decimal | null | undefined): string {

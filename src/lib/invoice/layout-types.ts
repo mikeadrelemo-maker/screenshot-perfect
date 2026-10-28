@@ -1,4 +1,5 @@
 import type { InvoiceType } from "./types";
+import type { InvoiceFontFamily } from "./fonts";
 
 export const LETTER_WIDTH_MM = 215.9;
 export const LETTER_HEIGHT_MM = 279.4;
@@ -32,7 +33,6 @@ export type FieldType =
   | "vat"
   | "net"
   | "wht"
-  | "wht1"
   | "wht2"
   | "due"
   | "vatableSales"
@@ -54,7 +54,7 @@ export interface LayoutField {
   w: number;
   h: number;
   // Styling
-  fontFamily?: string; // defaults to "Times New Roman"
+  fontFamily?: InvoiceFontFamily;
   fontSize: number; // in pt
   fontWeight: "normal" | "bold";
   align: "left" | "center" | "right";
@@ -139,7 +139,7 @@ export function getDefaultChargeFields(): LayoutField[] {
       type: "customer",
       category: "customer",
       x: 43.5,
-      y: 44.5,
+      y: 41.5,
       w: 110.0,
       h: 6.0,
       fontSize: 8.5,
@@ -173,7 +173,7 @@ export function getDefaultChargeFields(): LayoutField[] {
       type: "address",
       category: "customer",
       x: 43.5,
-      y: 50.5,
+      y: 53.5,
       w: 110.0,
       h: 6.0,
       fontSize: 8,
@@ -207,7 +207,7 @@ export function getDefaultChargeFields(): LayoutField[] {
       type: "dueDate",
       category: "header",
       x: 172.0,
-      y: 50.0,
+      y: 54.0,
       w: 32.0,
       h: 5.5,
       fontSize: 8,
@@ -224,7 +224,7 @@ export function getDefaultChargeFields(): LayoutField[] {
       type: "poNumber",
       category: "header",
       x: 172.0,
-      y: 53.0,
+      y: 57.5,
       w: 32.0,
       h: 5.5,
       fontSize: 8,
@@ -241,9 +241,9 @@ export function getDefaultChargeFields(): LayoutField[] {
       name: "ITEMS (Item Code)",
       type: "colItem",
       category: "items",
-      x: 4.0,
+      x: 6.0,
       y: 81.5,
-      w: 27.0,
+      w: 25.0,
       h: 63.0,
       fontSize: 7.5,
       fontWeight: "normal",
@@ -376,11 +376,11 @@ export function getDefaultChargeFields(): LayoutField[] {
     },
     {
       id: "f_wht",
-      name: "Less Withholding Tax (Legacy)",
+      name: "Withholding Tax 1",
       type: "wht",
       category: "totals",
       x: 154.0,
-      y: 194.0,
+      y: 192.5,
       w: 42.0,
       h: 6.0,
       fontFamily: "Times New Roman",
@@ -408,25 +408,24 @@ export function getDefaultChargeFields(): LayoutField[] {
       color: "#0d1329",
       visible: true,
       zIndex: 16,
-      sampleValue: "(₱ 179.20)",
+      sampleValue: "Tax 1 (1%): (₱179.20)",
     },
     {
       id: "f_wht2",
-      name: "Less Withholding Tax 2 (5%)",
+      name: "Withholding Tax 2",
       type: "wht2",
       category: "totals",
-      x: 154.0,
-      y: 201.0,
-      w: 42.0,
-      h: 5.5,
-      fontFamily: "Times New Roman",
+      x: 154,
+      y: 199.5,
+      w: 42,
+      h: 6,
       fontSize: 8,
       fontWeight: "normal",
       align: "right",
       color: "#0d1329",
       visible: true,
       zIndex: 17,
-      sampleValue: "(₱ 896.00)",
+      sampleValue: "Tax 2 (5%): (₱896.00)",
     },
     {
       id: "f_due",
@@ -544,7 +543,7 @@ export function getDefaultCashFields(): LayoutField[] {
       type: "customer",
       category: "customer",
       x: 45.0,
-      y: 51.0,
+      y: 48.0,
       w: 110.0,
       h: 6.0,
       fontSize: 8.5,
@@ -578,7 +577,7 @@ export function getDefaultCashFields(): LayoutField[] {
       type: "address",
       category: "customer",
       x: 45.0,
-      y: 57.0,
+      y: 60.0,
       w: 110.0,
       h: 6.0,
       fontSize: 8,
@@ -612,7 +611,7 @@ export function getDefaultCashFields(): LayoutField[] {
       type: "dueDate",
       category: "header",
       x: 172.0,
-      y: 52.0,
+      y: 54.0,
       w: 32.0,
       h: 5.5,
       fontSize: 8,
@@ -629,7 +628,7 @@ export function getDefaultCashFields(): LayoutField[] {
       type: "poNumber",
       category: "header",
       x: 172.0,
-      y: 55.5,
+      y: 59.5,
       w: 32.0,
       h: 5.5,
       fontSize: 8,
@@ -780,11 +779,11 @@ export function getDefaultCashFields(): LayoutField[] {
     },
     {
       id: "f_wht",
-      name: "Less Withholding Tax (Legacy)",
+      name: "Withholding Tax 1",
       type: "wht",
       category: "totals",
       x: 148.0,
-      y: 191.0,
+      y: 188.5,
       w: 42.0,
       h: 6.0,
       fontFamily: "Times New Roman",
@@ -812,25 +811,24 @@ export function getDefaultCashFields(): LayoutField[] {
       color: "#0d1329",
       visible: true,
       zIndex: 16,
-      sampleValue: "(₱ 65.00)",
+      sampleValue: "Tax 1 (1%): (₱65.00)",
     },
     {
       id: "f_wht2",
-      name: "Less Withholding Tax 2 (5%)",
+      name: "Withholding Tax 2",
       type: "wht2",
       category: "totals",
-      x: 148.0,
-      y: 197.5,
-      w: 42.0,
-      h: 5.5,
-      fontFamily: "Times New Roman",
+      x: 148,
+      y: 195.5,
+      w: 42,
+      h: 6,
       fontSize: 8,
       fontWeight: "normal",
       align: "right",
       color: "#0d1329",
       visible: true,
       zIndex: 17,
-      sampleValue: "(₱ 325.00)",
+      sampleValue: "Tax 2 (5%): (₱896.00)",
     },
     {
       id: "f_due",
@@ -931,7 +929,11 @@ export function createDefaultLayout(type: InvoiceType): InvoiceLayout {
       rowHeightMm: isCharge ? 6.3 : 6.25,
       rowCount: 10,
     },
-    fields: isCharge ? getDefaultChargeFields() : getDefaultCashFields(),
+    fields: (isCharge ? getDefaultChargeFields() : getDefaultCashFields()).map((field) => ({
+      ...field,
+      fontFamily: "Liberation Serif",
+      wrapText: field.type === "address" || field.type === "customer" || field.type === "colDesc",
+    })),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

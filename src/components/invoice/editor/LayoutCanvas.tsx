@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { InvoiceLayout, LayoutField } from "@/lib/invoice/layout-types";
 import { cn } from "@/lib/utils";
+import { registerCanvasFonts } from "@/lib/invoice/fonts";
+import { toast } from "sonner";
 
 interface LayoutCanvasProps {
   layout: InvoiceLayout;
@@ -23,6 +25,9 @@ export function LayoutCanvas({
   gridSizeMm = 1.0,
 }: LayoutCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    void registerCanvasFonts().catch((error) => toast.error(error.message));
+  }, []);
 
   // Conversion: display scale factor (pixels per mm on canvas at 100% zoom)
   // Standard screen density ~ 3.78 px per mm (96 DPI)
@@ -314,8 +319,8 @@ export function LayoutCanvas({
                     field.fontWeight === "bold" ? "font-bold" : "font-normal",
                   )}
                   style={{
-                    fontFamily: field.fontFamily || "'Times New Roman', Times, 'Liberation Serif', serif",
-                    fontSize: `${field.fontSize * (scale / PX_PER_MM) * 0.95}px`,
+                    fontFamily: field.fontFamily || "Liberation Serif",
+                    fontSize: `${field.fontSize * (96 / 72) * zoom}px`,
                     color: field.color || "#0d1329",
                   }}
                 >

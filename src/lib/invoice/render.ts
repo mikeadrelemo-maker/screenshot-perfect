@@ -10,39 +10,13 @@ import {
   type LayoutField,
 } from "./layout-types";
 import { loadActiveLayout } from "./layout-store";
+import { loadInvoiceFont, type InvoiceFontFamily } from "./fonts";
 
 // Vite asset imports resolve to exact hashed asset URLs across dev and production builds
 import timesRomanUrl from "@/assets/fonts/TimesNewRoman.ttf?url";
 import timesRomanBoldUrl from "@/assets/fonts/TimesNewRoman-Bold.ttf?url";
 
 export const ROWS_PER_PAGE = 10;
-
-const assetCache = new Map<string, Promise<ArrayBuffer>>();
-
-async function fetchFontArrayBuffer(candidates: string[]): Promise<ArrayBuffer | null> {
-  for (const url of candidates) {
-    if (!url) continue;
-    try {
-      if (assetCache.has(url)) {
-        return await assetCache.get(url)!;
-      }
-      const fetchPromise = (async () => {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-        return await res.arrayBuffer();
-      })();
-      assetCache.set(url, fetchPromise);
-      const data = await fetchPromise;
-      if (data && data.byteLength > 1000) {
-        return data;
-      }
-    } catch {
-      assetCache.delete(url);
-      // Try next candidate URL
-    }
-  }
-  return null;
-}
 
 const INK = rgb(0.05, 0.07, 0.16);
 
@@ -76,46 +50,22 @@ export async function renderInvoicePdf(
   doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
-  const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
-
-  // Attempt to load genuine Times New Roman fonts via multiple resilient paths:
-  const [regBytes, boldBytes] = await Promise.all([
-    fetchFontArrayBuffer([
-      timesRomanUrl,
-      `${base}fonts/TimesNewRoman.ttf`,
-      "/fonts/TimesNewRoman.ttf",
-      "./fonts/TimesNewRoman.ttf",
-      "fonts/TimesNewRoman.ttf",
-    ]),
-    fetchFontArrayBuffer([
-      timesRomanBoldUrl,
-      `${base}fonts/TimesNewRoman-Bold.ttf`,
-      "/fonts/TimesNewRoman-Bold.ttf",
-      "./fonts/TimesNewRoman-Bold.ttf",
-      "fonts/TimesNewRoman-Bold.ttf",
-    ]),
-  ]);
-
-  let font: PDFFont;
-  let fontB: PDFFont;
-  let isStandardFont = false;
-
-  if (regBytes && boldBytes) {
-    try {
-      font = await doc.embedFont(regBytes, { subset: true });
-      fontB = await doc.embedFont(boldBytes, { subset: true });
-    } catch {
-      // Fallback to built-in standard TimesRoman if fontkit parsing encounters an issue
-      font = await doc.embedFont(StandardFonts.TimesRoman);
-      fontB = await doc.embedFont(StandardFonts.TimesRomanBold);
-      isStandardFont = true;
-    }
-  } else {
-    // Graceful offline / zero-network fallback: standard PDF Times-Roman
-    font = await doc.embedFont(StandardFonts.TimesRoman);
-    fontB = await doc.embedFont(StandardFonts.TimesRomanBold);
-    isStandardFont = true;
-  }
+  // Load only fonts — the template background image is intentionally NOT loaded or embedded.
+  const families = new Set<InvoiceFontFamily>(["Liberation Serif"]);
+  layout.fields.forEach((field) => families.add(field.fontFamily || "Liberation Serif"));
+  const fonts = new Map<InvoiceFontFamily, { regular: PDFFont; bold: PDFFont }>();
+  await Promise.all(
+    [...families].map(async (family) => {
+      const [reg, bold] = await Promise.all([
+        loadInvoiceFont(family),
+        loadInvoiceFont(family, true),
+      ]);
+      fonts.set(family, {
+        regular: await doc.embedFont(reg, { subset: true }),
+        bold: await doc.embedFont(bold, { subset: true }),
+      });
+    }),
+  );
 
   const pageW = mmToPt(layout.pageWidthMm || LETTER_WIDTH_MM);
   const pageH = mmToPt(layout.pageHeightMm || LETTER_HEIGHT_MM);
@@ -152,71 +102,84 @@ export async function renderInvoicePdf(
   const drawFieldText = (
     p: PDFPage,
     field: LayoutField | undefined,
-    rawStr: string,
-    overrideFont?: PDFFont,
+    str: string,
+    forceBold = false,
   ) => {
     if (!field || !field.visible || !rawStr) return;
     const str = sanitizeText(rawStr);
     if (!str.trim()) return;
 
     const { x, y, w, h } = toPdfBox(field);
-    const f = overrideFont || (field.fontWeight === "bold" ? fontB : font);
+    const familyFonts = fonts.get(field.fontFamily || "Liberation Serif");
+    if (!familyFonts) throw new Error("Invoice font was not registered.");
+    const f = forceBold || field.fontWeight === "bold" ? familyFonts.bold : familyFonts.regular;
     const color = parseColor(field.color, INK);
     const sz = field.fontSize || 8;
 
-    const textWidth = f.widthOfTextAtSize(str, sz);
-    let textX = x;
-    if (field.align === "right") {
-      textX = x + w - textWidth;
-    } else if (field.align === "center") {
-      textX = x + (w - textWidth) / 2;
+    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > pageW + 0.01 || y + h > pageH + 0.01) {
+      throw new Error(
+        `Field "${field.name}" is outside the Letter page. Adjust its position or size.`,
+      );
     }
-
-    const baselineY = y + (h - sz) / 2 + sz * 0.15;
-
-    if (field.wrapText && textWidth > w) {
-      const words = str.split(" ");
+    // Fit both dimensions; split long words as well as ordinary paragraphs.
+    const linesAt = (size: number): string[] => {
+      if (!field.wrapText) return [str.replace(/\s*\n\s*/g, " ")];
       const lines: string[] = [];
-      let current = "";
-      for (const word of words) {
-        const test = current ? `${current} ${word}` : word;
-        if (f.widthOfTextAtSize(test, sz) <= w) {
-          current = test;
-        } else {
+      for (const paragraph of str.split("\n")) {
+        let current = "";
+        for (const word of paragraph.split(/\s+/)) {
+          const test = current ? `${current} ${word}` : word;
+          if (f.widthOfTextAtSize(test, size) <= w) {
+            current = test;
+            continue;
+          }
           if (current) lines.push(current);
-          current = word;
+          current = "";
+          for (const char of word) {
+            if (current && f.widthOfTextAtSize(current + char, size) > w) {
+              lines.push(current);
+              current = "";
+            }
+            current += char;
+          }
         }
+        lines.push(current);
       }
-      if (current) lines.push(current);
-
-      const lineHeight = sz * 1.15;
-      const totalH = lines.length * lineHeight;
-      let startY = y + (h + totalH) / 2 - sz;
-
-      for (const line of lines) {
-        const lineW = f.widthOfTextAtSize(line, sz);
-        let lineX = x;
-        if (field.align === "right") lineX = x + w - lineW;
-        else if (field.align === "center") lineX = x + (w - lineW) / 2;
-        p.drawText(line, { x: lineX, y: startY, size: sz, font: f, color });
-        startY -= lineHeight;
-      }
-    } else {
-      let actualSize = sz;
-      if (textWidth > w && w > 10) {
-        while (actualSize > 6 && f.widthOfTextAtSize(str, actualSize) > w) {
-          actualSize -= 0.25;
-        }
-        const newW = f.widthOfTextAtSize(str, actualSize);
-        if (field.align === "right") textX = x + w - newW;
-        else if (field.align === "center") textX = x + (w - newW) / 2;
-      }
-
-      p.drawText(str, { x: textX, y: baselineY, size: actualSize, font: f, color });
+      return lines;
+    };
+    let size = sz;
+    let lines = linesAt(size);
+    while (
+      size > 4 &&
+      (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h)
+    ) {
+      size = Math.max(4, size - 0.25);
+      lines = linesAt(size);
+    }
+    if (
+      lines.some((line) => f.widthOfTextAtSize(line, size) > w) ||
+      lines.length * size * 1.15 > h
+    ) {
+      throw new Error(
+        `Text does not fit "${field.name}". Increase the field size or enable wrapping.`,
+      );
+    }
+    const lineHeight = size * 1.15;
+    let baseline = y + (h + lines.length * lineHeight) / 2 - size;
+    for (const line of lines) {
+      const width = f.widthOfTextAtSize(line, size);
+      const textX =
+        field.align === "right"
+          ? x + w - width
+          : field.align === "center"
+            ? x + (w - width) / 2
+            : x;
+      p.drawText(line, { x: textX, y: baseline, size, font: f, color });
+      baseline -= lineHeight;
     }
   };
 
-  const totals = calcTotals(inv.items, inv);
+  const totals = calcTotals(inv.items, inv.whtRate, inv.whtRate2, inv.whtEnabled, inv.whtEnabled2);
   const rowsPerPage = layout.tableConfig?.rowCount || ROWS_PER_PAGE;
   const pageCount = Math.max(1, Math.ceil(inv.items.length / rowsPerPage));
 
@@ -226,7 +189,7 @@ export async function renderInvoicePdf(
     // Printable Invoice Number (only rendered if user entered a value)
     const fSerial = getField("invoiceNumber");
     if (fSerial && fSerial.visible && inv.invoiceNumber) {
-      drawFieldText(p, fSerial, inv.invoiceNumber, fontB);
+      drawFieldText(p, fSerial, inv.invoiceNumber, true);
     }
 
     // Header fields
@@ -275,10 +238,10 @@ export async function renderInvoicePdf(
 
       drawRowCol(fColItem, it.item);
       drawRowCol(fColDesc, it.description);
-      drawRowCol(fColQty, it.qty, "center");
+      drawRowCol(fColQty, it.qty);
       if (c.valid) {
-        drawRowCol(fColUnit, peso(c.vatUnit), "right");
-        drawRowCol(fColAmount, peso(c.amount), "right");
+        drawRowCol(fColUnit, peso(c.vatUnit));
+        drawRowCol(fColAmount, peso(c.amount));
       }
     });
 
@@ -298,26 +261,9 @@ export async function renderInvoicePdf(
       drawFieldText(p, getField("totalSales"), peso(totals.totalSales));
       drawFieldText(p, getField("vat"), peso(totals.vat));
       drawFieldText(p, getField("net"), peso(totals.net));
-
-      // Withholding Tax 1 deduction
-      if (totals.wht1Enabled && totals.wht1.gt(0)) {
-        drawFieldText(
-          p,
-          getField("wht1") || getField("wht"),
-          `(${peso(totals.wht1)})`,
-        );
-      }
-
-      // Withholding Tax 2 deduction
-      if (totals.wht2Enabled && totals.wht2.gt(0)) {
-        drawFieldText(
-          p,
-          getField("wht2"),
-          `(${peso(totals.wht2)})`,
-        );
-      }
-
-      drawFieldText(p, getField("due"), peso(totals.due), fontB);
+      drawFieldText(p, getField("wht"), `Tax 1 (${inv.whtRate}%): (${peso(totals.wht)})`);
+      drawFieldText(p, getField("wht2"), `Tax 2 (${inv.whtRate2 ?? "5"}%): (${peso(totals.wht2)})`);
+      drawFieldText(p, getField("due"), peso(totals.due), true);
       drawFieldText(p, getField("vatableSales"), peso(totals.net));
       drawFieldText(p, getField("vatAmount"), peso(totals.vat));
     }
