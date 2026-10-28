@@ -1,6 +1,7 @@
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { calcLine, calcTotals, peso, toDec } from "@/lib/invoice/calc";
 import { newId, type InvoiceData, type LineItem } from "@/lib/invoice/types";
@@ -53,10 +54,9 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
       "items",
       inv.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
     );
-  const totals = calcTotals(inv.items, inv.whtRate);
+  const totals = calcTotals(inv.items, inv.whtRate, inv.whtRate2, inv.whtEnabled, inv.whtEnabled2);
   const req = (v: string) => (v.trim() ? undefined : "Missing");
   const opt = (v: string) => (v.trim() ? undefined : "Not in source");
-  const rateBad = toDec(inv.whtRate) === null;
   const src = toDec(inv.sourceTotal);
   const srcDiff = src ? totals.totalSales.sub(src).abs() : null;
 
@@ -69,7 +69,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="Invoice No."
             value={inv.invoiceNumber}
             onChange={(v) => set("invoiceNumber", v)}
-            flag={req(inv.invoiceNumber)}
+            placeholder="Optional"
           />
           <Field
             label="Date"
@@ -88,7 +88,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="Reference / PO No."
             value={inv.poNumber}
             onChange={(v) => set("poNumber", v)}
-            flag={inv.type === "charge" ? opt(inv.poNumber) : undefined}
+            placeholder="Optional"
           />
           <Field
             label="Registered name (Customer)"
@@ -113,7 +113,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="Business address"
             value={inv.address}
             onChange={(v) => set("address", v)}
-            flag={opt(inv.address)}
+            placeholder="Optional"
             className="col-span-2 md:col-span-3"
           />
           <Field
@@ -232,7 +232,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-[1fr_340px]">
+      <section className="grid gap-4 md:grid-cols-[1fr_390px]">
         <div className="space-y-2 text-xs text-muted-foreground">
           <p>
             Unit price (VAT inc.) = original unit price × 1.12, rounded to centavos. Amount =
@@ -250,26 +250,29 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
           <Row label="Total Sales (VAT Inclusive)" v={peso(totals.totalSales)} />
           <Row label="Less: VAT" v={peso(totals.vat)} />
           <Row label="Amount: Net of VAT" v={peso(totals.net)} />
-          <div className="flex items-center justify-between gap-2 py-1.5">
-            <span className="flex items-center gap-1.5">
-              Less: Withholding Tax
-              <span className="relative">
-                <input
-                  aria-label="Withholding tax rate"
-                  value={inv.whtRate}
-                  onChange={(e) => set("whtRate", e.target.value)}
-                  className={cn(
-                    "num h-7 w-14 rounded border border-input bg-card px-1.5 pr-4 text-right text-xs",
-                    rateBad && "border-warning bg-warning-soft",
-                  )}
-                />
-                <span className="pointer-events-none absolute right-1.5 top-1.5 text-xs text-muted-foreground">
-                  %
-                </span>
-              </span>
-            </span>
-            <span className="num text-destructive">({peso(totals.wht)})</span>
-          </div>
+          {([1, 2] as const).map((tax) => {
+            const rateKey = tax === 1 ? "whtRate" : "whtRate2";
+            const enabledKey = tax === 1 ? "whtEnabled" : "whtEnabled2";
+            const rate = inv[rateKey] ?? (tax === 1 ? "1" : "5");
+            const enabled = inv[enabledKey] ?? true;
+            const invalid = toDec(rate) === null || (toDec(rate)?.isNegative() ?? false);
+            return (
+              <div key={tax} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                <div className="flex items-center gap-2">
+                  <Switch aria-label={`Enable Withholding Tax ${tax}`} checked={enabled}
+                    onCheckedChange={(checked) => set(enabledKey, checked)} />
+                  <span className="text-xs">Withholding Tax {tax}</span>
+                  <div className="flex items-center gap-1">
+                    <Input aria-label={`Withholding Tax ${tax} rate`} inputMode="decimal"
+                      value={rate} onChange={(e) => set(rateKey, e.target.value)}
+                      className={cn("num h-7 w-14 px-1 text-right text-xs", invalid && "border-warning bg-warning-soft")} />
+                    <span className="text-xs">%</span>
+                  </div>
+                </div>
+                <span className="num text-destructive">({peso(tax === 1 ? totals.wht : totals.wht2)})</span>
+              </div>
+            );
+          })}
           <div className="mt-2 flex items-center justify-between border-t pt-3">
             <span className="font-semibold">TOTAL AMOUNT DUE</span>
             <span className="num text-lg font-semibold text-primary">{peso(totals.due)}</span>

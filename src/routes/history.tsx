@@ -88,7 +88,7 @@ function HistoryPage() {
               </tr>
             )}
             {rows.map((i) => {
-              const t = calcTotals(i.items, i.whtRate);
+              const t = calcTotals(i.items, i.whtRate, i.whtRate2, i.whtEnabled, i.whtEnabled2);
               const isDup = (counts.get(i.invoiceNumber.trim().toLowerCase()) ?? 0) > 1;
               return (
                 <tr key={i.id} className="border-t hover:bg-muted/50">

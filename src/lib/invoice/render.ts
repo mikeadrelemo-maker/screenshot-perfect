@@ -91,59 +91,47 @@ export async function renderInvoicePdf(
     const color = parseColor(field.color, INK);
     const sz = field.fontSize || 8;
 
-    // Single-line or fitted text within width
-    const textWidth = f.widthOfTextAtSize(str, sz);
-    let textX = x;
-    if (field.align === "right") {
-      textX = x + w - textWidth;
-    } else if (field.align === "center") {
-      textX = x + (w - textWidth) / 2;
+    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > pageW + 0.01 || y + h > pageH + 0.01) {
+      throw new Error(`Field "${field.name}" is outside the Letter page. Adjust its position or size.`);
     }
-
-    // Baseline placement in vertical center of field height
-    const baselineY = y + (h - sz) / 2 + sz * 0.15;
-
-    if (field.wrapText && textWidth > w) {
-      // Split into lines
-      const words = str.split(" ");
+    // Fit both dimensions; split long words as well as ordinary paragraphs.
+    const linesAt = (size: number): string[] => {
+      if (!field.wrapText) return [str.replace(/\s*\n\s*/g, " ")];
       const lines: string[] = [];
-      let current = "";
-      for (const word of words) {
-        const test = current ? `${current} ${word}` : word;
-        if (f.widthOfTextAtSize(test, sz) <= w) {
-          current = test;
-        } else {
+      for (const paragraph of str.split("\n")) {
+        let current = "";
+        for (const word of paragraph.split(/\s+/)) {
+          const test = current ? `${current} ${word}` : word;
+          if (f.widthOfTextAtSize(test, size) <= w) { current = test; continue; }
           if (current) lines.push(current);
-          current = word;
+          current = "";
+          for (const char of word) {
+            if (current && f.widthOfTextAtSize(current + char, size) > w) {
+              lines.push(current); current = "";
+            }
+            current += char;
+          }
         }
+        lines.push(current);
       }
-      if (current) lines.push(current);
-
-      const lineHeight = sz * 1.15;
-      const totalH = lines.length * lineHeight;
-      let startY = y + (h + totalH) / 2 - sz;
-
-      for (const line of lines) {
-        const lineW = f.widthOfTextAtSize(line, sz);
-        let lineX = x;
-        if (field.align === "right") lineX = x + w - lineW;
-        else if (field.align === "center") lineX = x + (w - lineW) / 2;
-        p.drawText(line, { x: lineX, y: startY, size: sz, font: f, color });
-        startY -= lineHeight;
-      }
-    } else {
-      // If single line exceeds width, auto shrink down to 6pt if needed
-      let actualSize = sz;
-      if (textWidth > w && w > 10) {
-        while (actualSize > 6 && f.widthOfTextAtSize(str, actualSize) > w) {
-          actualSize -= 0.25;
-        }
-        const newW = f.widthOfTextAtSize(str, actualSize);
-        if (field.align === "right") textX = x + w - newW;
-        else if (field.align === "center") textX = x + (w - newW) / 2;
-      }
-
-      p.drawText(str, { x: textX, y: baselineY, size: actualSize, font: f, color });
+      return lines;
+    };
+    let size = sz;
+    let lines = linesAt(size);
+    while (size > 4 && (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h)) {
+      size = Math.max(4, size - 0.25);
+      lines = linesAt(size);
+    }
+    if (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h) {
+      throw new Error(`Text does not fit "${field.name}". Increase the field size or enable wrapping.`);
+    }
+    const lineHeight = size * 1.15;
+    let baseline = y + (h + lines.length * lineHeight) / 2 - size;
+    for (const line of lines) {
+      const width = f.widthOfTextAtSize(line, size);
+      const textX = field.align === "right" ? x + w - width : field.align === "center" ? x + (w - width) / 2 : x;
+      p.drawText(line, { x: textX, y: baseline, size, font: f, color });
+      baseline -= lineHeight;
     }
   };
 

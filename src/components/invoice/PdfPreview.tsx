@@ -45,7 +45,10 @@ export function PdfPreview({
         });
         setError(null);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not generate the PDF.");
+        if (!cancelled) {
+          setBlob(null);
+          setError(e instanceof Error ? e.message : "Could not generate the PDF.");
+        }
       } finally {
         if (!cancelled) setBusy(false);
       }
@@ -96,13 +99,13 @@ export function PdfPreview({
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={print} disabled={!url || busy}>
+          <Button size="sm" variant="outline" onClick={print} disabled={!url || busy || !!error}>
             <Printer className="h-4 w-4" /> Print
           </Button>
           <Button
             size="sm"
             onClick={() => blob && downloadBlob(blob, fileName)}
-            disabled={!blob || busy}
+            disabled={!blob || busy || !!error}
           >
             <Download className="h-4 w-4" /> Download PDF
           </Button>
