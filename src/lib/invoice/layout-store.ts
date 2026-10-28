@@ -17,25 +17,45 @@ function storageKeyForType(type: InvoiceType): string {
 
 /** Sanitize and reconcile a loaded layout against defaults to ensure no fields are missing */
 function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): InvoiceLayout {
+  if (!loaded || typeof loaded !== "object" || Array.isArray(loaded))
+    throw new Error("Layout must be an object.");
   const fallback = createDefaultLayout(type);
+  const finite = (v: unknown, def: number, min = 0, max = 1000): number =>
+    typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? v : def;
   const fieldsMap = new Map<string, LayoutField>();
 
   // Add loaded fields
   if (Array.isArray(loaded.fields)) {
     loaded.fields.forEach((f) => {
-      if (f && typeof f.id === "string") {
+      const base = fallback.fields.find((field) => field.id === f?.id);
+      const validTypes = new Set(fallback.fields.map((field) => field.type));
+      validTypes.add("customText");
+      if (f && typeof f.id === "string" && (base || validTypes.has(f.type))) {
+        const pageW = loaded.orientation === "landscape" ? LETTER_HEIGHT_MM : LETTER_WIDTH_MM;
+        const pageH = loaded.orientation === "landscape" ? LETTER_WIDTH_MM : LETTER_HEIGHT_MM;
+        const w = finite(f.w, base?.w ?? 30, 0.1, pageW);
+        const h = finite(f.h, base?.h ?? 6, 0.1, pageH);
         fieldsMap.set(f.id, {
+          ...base,
           ...f,
-          x: typeof f.x === "number" && !isNaN(f.x) ? f.x : 10,
-          y: typeof f.y === "number" && !isNaN(f.y) ? f.y : 10,
-          w: typeof f.w === "number" && f.w > 0 ? f.w : 30,
-          h: typeof f.h === "number" && f.h > 0 ? f.h : 6,
-          fontSize: typeof f.fontSize === "number" && f.fontSize >= 5 ? f.fontSize : 8,
+          name: typeof f.name === "string" ? f.name : (base?.name ?? "Custom field"),
+          type: base?.type ?? f.type,
+          category: base?.category ?? "custom",
+          x: Math.min(finite(f.x, base?.x ?? 10, 0, pageW), pageW - w),
+          y: Math.min(finite(f.y, base?.y ?? 10, 0, pageH), pageH - h),
+          w,
+          h,
+          fontFamily: f.fontFamily === "DejaVu Sans" ? "DejaVu Sans" : "Liberation Serif",
+          fontSize: finite(f.fontSize, 8, 4, 72),
           fontWeight: f.fontWeight === "bold" ? "bold" : "normal",
           align: f.align === "center" || f.align === "right" ? f.align : "left",
-          color: typeof f.color === "string" ? f.color : "#0d1329",
+          color:
+            typeof f.color === "string" && /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : "#0d1329",
           visible: f.visible !== false,
-          zIndex: typeof f.zIndex === "number" ? f.zIndex : 1,
+          wrapText: f.wrapText === true,
+          staticText: typeof f.staticText === "string" ? f.staticText : undefined,
+          sampleValue: typeof f.sampleValue === "string" ? f.sampleValue : base?.sampleValue,
+          zIndex: finite(f.zIndex, 1, 0, 10000),
         });
       }
     });
@@ -52,28 +72,18 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
   const isLandscape = orientation === "landscape";
 
   return {
-    id: loaded.id || fallback.id,
-    name: loaded.name || fallback.name,
+    id: typeof loaded.id === "string" ? loaded.id : fallback.id,
+    name: typeof loaded.name === "string" ? loaded.name : fallback.name,
     invoiceType: type,
     paperSize: "letter",
     orientation,
     pageWidthMm: isLandscape ? LETTER_HEIGHT_MM : LETTER_WIDTH_MM,
     pageHeightMm: isLandscape ? LETTER_WIDTH_MM : LETTER_HEIGHT_MM,
     marginsMm: {
-      top:
-        typeof loaded.marginsMm?.top === "number" ? loaded.marginsMm.top : fallback.marginsMm.top,
-      bottom:
-        typeof loaded.marginsMm?.bottom === "number"
-          ? loaded.marginsMm.bottom
-          : fallback.marginsMm.bottom,
-      left:
-        typeof loaded.marginsMm?.left === "number"
-          ? loaded.marginsMm.left
-          : fallback.marginsMm.left,
-      right:
-        typeof loaded.marginsMm?.right === "number"
-          ? loaded.marginsMm.right
-          : fallback.marginsMm.right,
+      top: finite(loaded.marginsMm?.top, fallback.marginsMm.top, 0, 100),
+      bottom: finite(loaded.marginsMm?.bottom, fallback.marginsMm.bottom, 0, 100),
+      left: finite(loaded.marginsMm?.left, fallback.marginsMm.left, 0, 100),
+      right: finite(loaded.marginsMm?.right, fallback.marginsMm.right, 0, 100),
     },
     // The template background is a positioning guide for the editor only — never for print.
     // Default to false so existing layouts that were saved with showBackgroundTemplate:true
@@ -87,18 +97,11 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
         ? loaded.backgroundOpacity
         : 1.0,
     tableConfig: {
-      rowTopMm:
-        typeof loaded.tableConfig?.rowTopMm === "number"
-          ? loaded.tableConfig.rowTopMm
-          : fallback.tableConfig.rowTopMm,
-      rowHeightMm:
-        typeof loaded.tableConfig?.rowHeightMm === "number"
-          ? loaded.tableConfig.rowHeightMm
-          : fallback.tableConfig.rowHeightMm,
-      rowCount:
-        typeof loaded.tableConfig?.rowCount === "number"
-          ? loaded.tableConfig.rowCount
-          : fallback.tableConfig.rowCount,
+      rowTopMm: finite(loaded.tableConfig?.rowTopMm, fallback.tableConfig.rowTopMm, 0, 250),
+      rowHeightMm: finite(loaded.tableConfig?.rowHeightMm, fallback.tableConfig.rowHeightMm, 1, 30),
+      rowCount: Math.floor(
+        finite(loaded.tableConfig?.rowCount, fallback.tableConfig.rowCount, 1, 100),
+      ),
     },
     fields: Array.from(fieldsMap.values()),
     createdAt: loaded.createdAt || fallback.createdAt,
@@ -108,7 +111,7 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
 
 /** Load the active layout for a given invoice type */
 export function loadActiveLayout(type: InvoiceType): InvoiceLayout {
-  if (typeof window === "undefined" || !window.localStorage) {
+  if (typeof window === "undefined") {
     return createDefaultLayout(type);
   }
   try {
@@ -124,15 +127,14 @@ export function loadActiveLayout(type: InvoiceType): InvoiceLayout {
 
 /** Save the active layout for a given invoice type */
 export function saveActiveLayout(layout: InvoiceLayout): void {
-  if (typeof window === "undefined" || !window.localStorage) return;
+  if (typeof window === "undefined") return;
+  const updated = { ...layout, updatedAt: new Date().toISOString() };
   try {
-    const updated = {
-      ...layout,
-      updatedAt: new Date().toISOString(),
-    };
     localStorage.setItem(storageKeyForType(layout.invoiceType), JSON.stringify(updated));
-  } catch (err) {
-    console.error("Failed to save invoice layout to localStorage:", err);
+  } catch {
+    throw new Error(
+      "Layout could not be saved in this browser. Storage may be full or disabled; export the layout to keep a copy.",
+    );
   }
 }
 
@@ -156,11 +158,34 @@ export interface LayoutPreset {
 
 /** Load all user-saved presets */
 export function loadPresets(): LayoutPreset[] {
-  if (typeof window === "undefined" || !window.localStorage) return [];
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(KEY_PRESETS);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((preset) => {
+      if (
+        !preset ||
+        typeof preset.id !== "string" ||
+        typeof preset.name !== "string" ||
+        !preset.layout
+      )
+        return [];
+      try {
+        return [
+          {
+            ...preset,
+            layout: reconcileLayout(
+              preset.layout,
+              preset.layout.invoiceType === "cash" ? "cash" : "charge",
+            ),
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
   } catch {
     return [];
   }

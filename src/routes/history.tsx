@@ -10,6 +10,8 @@ import type { InvoiceData } from "@/lib/invoice/types";
 export const Route = createFileRoute("/history")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Invoice History — SOS Invoice Template Converter" },
       {
         name: "description",

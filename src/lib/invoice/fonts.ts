@@ -21,9 +21,13 @@ export function loadInvoiceFont(family: InvoiceFontFamily, bold = false): Promis
         const bytes = await response.arrayBuffer();
         const signature = new DataView(bytes).getUint32(0);
         if (signature === 0x00010000 || signature === 0x4f54544f) return bytes;
-      } catch { /* Try the deployment-independent asset copy. */ }
+      } catch {
+        /* Try the deployment-independent asset copy. */
+      }
     }
-    throw new Error(`Could not load ${family}${bold ? " Bold" : ""}. Check the font assets and retry.`);
+    throw new Error(
+      `Could not load ${family}${bold ? " Bold" : ""}. Check the font assets and retry.`,
+    );
   })();
   cache.set(localUrl, pending);
   void pending.catch(() => cache.delete(localUrl));
@@ -31,10 +35,14 @@ export function loadInvoiceFont(family: InvoiceFontFamily, bold = false): Promis
 }
 
 export async function registerCanvasFonts(): Promise<void> {
-  await Promise.all((Object.keys(assets) as InvoiceFontFamily[]).flatMap((family) =>
-    [false, true].map(async (bold) => {
-      const face = new FontFace(family, await loadInvoiceFont(family, bold), { weight: bold ? "700" : "400" });
-      document.fonts.add(await face.load());
-    }),
-  ));
+  await Promise.all(
+    (Object.keys(assets) as InvoiceFontFamily[]).flatMap((family) =>
+      [false, true].map(async (bold) => {
+        const face = new FontFace(family, await loadInvoiceFont(family, bold), {
+          weight: bold ? "700" : "400",
+        });
+        document.fonts.add(await face.load());
+      }),
+    ),
+  );
 }

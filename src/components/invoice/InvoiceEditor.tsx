@@ -259,17 +259,29 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             return (
               <div key={tax} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
                 <div className="flex items-center gap-2">
-                  <Switch aria-label={`Enable Withholding Tax ${tax}`} checked={enabled}
-                    onCheckedChange={(checked) => set(enabledKey, checked)} />
+                  <Switch
+                    aria-label={`Enable Withholding Tax ${tax}`}
+                    checked={enabled}
+                    onCheckedChange={(checked) => set(enabledKey, checked)}
+                  />
                   <span className="text-xs">Withholding Tax {tax}</span>
                   <div className="flex items-center gap-1">
-                    <Input aria-label={`Withholding Tax ${tax} rate`} inputMode="decimal"
-                      value={rate} onChange={(e) => set(rateKey, e.target.value)}
-                      className={cn("num h-7 w-14 px-1 text-right text-xs", invalid && "border-warning bg-warning-soft")} />
+                    <Input
+                      aria-label={`Withholding Tax ${tax} rate`}
+                      inputMode="decimal"
+                      value={rate}
+                      onChange={(e) => set(rateKey, e.target.value)}
+                      className={cn(
+                        "num h-7 w-14 px-1 text-right text-xs",
+                        invalid && "border-warning bg-warning-soft",
+                      )}
+                    />
                     <span className="text-xs">%</span>
                   </div>
                 </div>
-                <span className="num text-destructive">({peso(tax === 1 ? totals.wht : totals.wht2)})</span>
+                <span className="num text-destructive">
+                  ({peso(tax === 1 ? totals.wht : totals.wht2)})
+                </span>
               </div>
             );
           })}

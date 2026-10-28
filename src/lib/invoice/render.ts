@@ -47,13 +47,18 @@ export async function renderInvoicePdf(
   const families = new Set<InvoiceFontFamily>(["Liberation Serif"]);
   layout.fields.forEach((field) => families.add(field.fontFamily || "Liberation Serif"));
   const fonts = new Map<InvoiceFontFamily, { regular: PDFFont; bold: PDFFont }>();
-  await Promise.all([...families].map(async (family) => {
-    const [reg, bold] = await Promise.all([loadInvoiceFont(family), loadInvoiceFont(family, true)]);
-    fonts.set(family, {
-      regular: await doc.embedFont(reg, { subset: true }),
-      bold: await doc.embedFont(bold, { subset: true }),
-    });
-  }));
+  await Promise.all(
+    [...families].map(async (family) => {
+      const [reg, bold] = await Promise.all([
+        loadInvoiceFont(family),
+        loadInvoiceFont(family, true),
+      ]);
+      fonts.set(family, {
+        regular: await doc.embedFont(reg, { subset: true }),
+        bold: await doc.embedFont(bold, { subset: true }),
+      });
+    }),
+  );
 
   const pageW = mmToPt(layout.pageWidthMm || LETTER_WIDTH_MM);
   const pageH = mmToPt(layout.pageHeightMm || LETTER_HEIGHT_MM);
@@ -92,7 +97,9 @@ export async function renderInvoicePdf(
     const sz = field.fontSize || 8;
 
     if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > pageW + 0.01 || y + h > pageH + 0.01) {
-      throw new Error(`Field "${field.name}" is outside the Letter page. Adjust its position or size.`);
+      throw new Error(
+        `Field "${field.name}" is outside the Letter page. Adjust its position or size.`,
+      );
     }
     // Fit both dimensions; split long words as well as ordinary paragraphs.
     const linesAt = (size: number): string[] => {
@@ -102,12 +109,16 @@ export async function renderInvoicePdf(
         let current = "";
         for (const word of paragraph.split(/\s+/)) {
           const test = current ? `${current} ${word}` : word;
-          if (f.widthOfTextAtSize(test, size) <= w) { current = test; continue; }
+          if (f.widthOfTextAtSize(test, size) <= w) {
+            current = test;
+            continue;
+          }
           if (current) lines.push(current);
           current = "";
           for (const char of word) {
             if (current && f.widthOfTextAtSize(current + char, size) > w) {
-              lines.push(current); current = "";
+              lines.push(current);
+              current = "";
             }
             current += char;
           }
@@ -118,18 +129,31 @@ export async function renderInvoicePdf(
     };
     let size = sz;
     let lines = linesAt(size);
-    while (size > 4 && (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h)) {
+    while (
+      size > 4 &&
+      (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h)
+    ) {
       size = Math.max(4, size - 0.25);
       lines = linesAt(size);
     }
-    if (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h) {
-      throw new Error(`Text does not fit "${field.name}". Increase the field size or enable wrapping.`);
+    if (
+      lines.some((line) => f.widthOfTextAtSize(line, size) > w) ||
+      lines.length * size * 1.15 > h
+    ) {
+      throw new Error(
+        `Text does not fit "${field.name}". Increase the field size or enable wrapping.`,
+      );
     }
     const lineHeight = size * 1.15;
     let baseline = y + (h + lines.length * lineHeight) / 2 - size;
     for (const line of lines) {
       const width = f.widthOfTextAtSize(line, size);
-      const textX = field.align === "right" ? x + w - width : field.align === "center" ? x + (w - width) / 2 : x;
+      const textX =
+        field.align === "right"
+          ? x + w - width
+          : field.align === "center"
+            ? x + (w - width) / 2
+            : x;
       p.drawText(line, { x: textX, y: baseline, size, font: f, color });
       baseline -= lineHeight;
     }

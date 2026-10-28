@@ -13,6 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { InvoiceLayout, LayoutField } from "@/lib/invoice/layout-types";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +194,26 @@ export function FieldInspector({
           Typography & Style
         </Label>
 
+        <div>
+          <Label className="text-xs">Font Family</Label>
+          <Select
+            value={field.fontFamily || "Liberation Serif"}
+            onValueChange={(value) =>
+              onUpdateField({
+                ...field,
+                fontFamily: value === "DejaVu Sans" ? "DejaVu Sans" : "Liberation Serif",
+              })
+            }
+          >
+            <SelectTrigger aria-label="Font Family">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Liberation Serif">Liberation Serif</SelectItem>
+              <SelectItem value="DejaVu Sans">DejaVu Sans</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-[11px] text-muted-foreground">Font Size (pt)</Label>

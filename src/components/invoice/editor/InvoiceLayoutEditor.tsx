@@ -25,6 +25,8 @@ import { FieldsList } from "./FieldsList";
 import { FieldInspector } from "./FieldInspector";
 import { PdfPreview } from "../PdfPreview";
 
+const createInitialLayout = (type: InvoiceType) => createDefaultLayout(type);
+
 // Mock sample invoice data for realistic layout previewing and printing
 function createSampleInvoice(type: InvoiceType): InvoiceData {
   return {
@@ -77,20 +79,61 @@ function createSampleInvoice(type: InvoiceType): InvoiceData {
 
 export function InvoiceLayoutEditor({
   initialType = "charge",
-  onBackToConverter,
 }: {
   initialType?: InvoiceType;
   onBackToConverter?: () => void;
 }) {
-  const [activeType, setActiveType] = useState<InvoiceType>(initialType);
-  const [layout, setLayout] = useState<InvoiceLayout>(() => loadActiveLayout(initialType));
+  const [layout, setLayout] = useState<InvoiceLayout>(() => createInitialLayout(initialType));
+  const hydrated = useRef(false);
+  const dirty = useRef(false);
+  const latestLayout = useRef(layout);
+  const [saveState, setSaveState] = useState("Saved in this browser");
+  latestLayout.current = layout;
+  useEffect(() => {
+    const loaded = loadActiveLayout(initialType);
+    setLayout(loaded);
+    setHistory([loaded]);
+    setHistoryIndex(0);
+    hydrated.current = true;
+  }, [initialType]);
+  useEffect(() => {
+    if (!hydrated.current || !dirty.current) return;
+    setSaveState("Saving…");
+    const timer = setTimeout(() => {
+      try {
+        saveActiveLayout(layout);
+        dirty.current = false;
+        setSaveState("Saved in this browser");
+      } catch (error) {
+        setSaveState("Not saved");
+        toast.error(error instanceof Error ? error.message : "Could not save layout.");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [layout]);
+  useEffect(() => {
+    const flush = () => {
+      if (!dirty.current) return;
+      try {
+        saveActiveLayout(latestLayout.current);
+        dirty.current = false;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not save layout.");
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(0.9);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<"canvas" | "pdf">("canvas");
 
   // Undo / Redo history stacks
-  const [history, setHistory] = useState<InvoiceLayout[]>([loadActiveLayout(initialType)]);
+  const [history, setHistory] = useState<InvoiceLayout[]>([createInitialLayout(initialType)]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
   // File input ref for importing JSON layout
@@ -98,7 +141,15 @@ export function InvoiceLayoutEditor({
 
   // Synchronize when switching between Charge and Cash invoice types
   const handleSelectType = useCallback((type: InvoiceType) => {
-    setActiveType(type);
+    if (dirty.current) {
+      try {
+        saveActiveLayout(latestLayout.current);
+        dirty.current = false;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not save layout.");
+        return;
+      }
+    }
     const loaded = loadActiveLayout(type);
     setLayout(loaded);
     setSelectedFieldId(null);
@@ -108,6 +159,7 @@ export function InvoiceLayoutEditor({
 
   const pushState = useCallback(
     (newLayout: InvoiceLayout) => {
+      dirty.current = true;
       setLayout(newLayout);
       setHistory((prev) => {
         const upToCurrent = prev.slice(0, historyIndex + 1);
@@ -125,14 +177,20 @@ export function InvoiceLayoutEditor({
     if (!canUndo) return;
     const nextIndex = historyIndex - 1;
     setHistoryIndex(nextIndex);
-    setLayout(history[nextIndex]!);
+    const next = history[nextIndex];
+    if (!next) return;
+    dirty.current = true;
+    setLayout(next);
   }, [canUndo, history, historyIndex]);
 
   const handleRedo = useCallback(() => {
     if (!canRedo) return;
     const nextIndex = historyIndex + 1;
     setHistoryIndex(nextIndex);
-    setLayout(history[nextIndex]!);
+    const next = history[nextIndex];
+    if (!next) return;
+    dirty.current = true;
+    setLayout(next);
   }, [canRedo, history, historyIndex]);
 
   // Keyboard shortcut listener for Ctrl+Z and Ctrl+Y
@@ -256,6 +314,7 @@ export function InvoiceLayoutEditor({
         y: defaultMatch.y,
         w: defaultMatch.w,
         h: defaultMatch.h,
+        fontFamily: defaultMatch.fontFamily ?? "Liberation Serif",
         fontSize: defaultMatch.fontSize,
         fontWeight: defaultMatch.fontWeight,
         align: defaultMatch.align,
@@ -310,7 +369,14 @@ export function InvoiceLayoutEditor({
 
   // Save layout permanently to localStorage
   const handleSaveLayout = useCallback(() => {
-    saveActiveLayout(layout);
+    try {
+      saveActiveLayout(layout);
+      dirty.current = false;
+      setSaveState("Saved in this browser");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save layout.");
+      return;
+    }
     toast.success(
       `Saved ${layout.name} for ${layout.invoiceType === "charge" ? "Charge" : "Cash"} invoices.`,
     );
@@ -327,6 +393,8 @@ export function InvoiceLayoutEditor({
 
   // Reset layout to last saved version in localStorage
   const handleResetLayout = useCallback(() => {
+    if (!window.confirm("Discard pending changes and reload the last saved layout?")) return;
+    dirty.current = false;
     const reset = resetToSavedLayout(layout.invoiceType);
     setLayout(reset);
     setSelectedFieldId(null);
@@ -341,12 +409,19 @@ export function InvoiceLayoutEditor({
       !window.confirm(
         `Are you sure you want to restore default template coordinates for ${
           layout.invoiceType === "charge" ? "Charge" : "Cash"
-        } Invoice? This will overwrite unsaved changes.`,
+        } Invoice? This replaces the saved layout in this browser.`,
       )
     ) {
       return;
     }
-    const def = restoreDefaultLayout(layout.invoiceType);
+    let def: InvoiceLayout;
+    try {
+      def = restoreDefaultLayout(layout.invoiceType);
+      dirty.current = false;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not reset layout.");
+      return;
+    }
     setLayout(def);
     setSelectedFieldId(null);
     setHistory([def]);
@@ -442,6 +517,10 @@ export function InvoiceLayoutEditor({
         onViewModeChange={setViewMode}
       />
 
+      <p className="border-b px-4 py-1 text-xs text-muted-foreground" role="status">
+        {saveState} · Layouts stay on this browser/device and may be lost if browser data is
+        cleared.
+      </p>
       {/* Main Workspace Body */}
       {viewMode === "canvas" ? (
         <div className="flex flex-1 overflow-hidden">
