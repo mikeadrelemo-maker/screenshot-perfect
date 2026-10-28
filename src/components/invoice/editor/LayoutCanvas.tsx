@@ -314,6 +314,7 @@ export function LayoutCanvas({
                     field.fontWeight === "bold" ? "font-bold" : "font-normal",
                   )}
                   style={{
+                    fontFamily: field.fontFamily || "'Times New Roman', Times, 'Liberation Serif', serif",
                     fontSize: `${field.fontSize * (scale / PX_PER_MM) * 0.95}px`,
                     color: field.color || "#0d1329",
                   }}

@@ -1,4 +1,4 @@
-import { Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,8 @@ function Field({
   flag,
   placeholder,
   className,
+  optional,
+  hint,
 }: {
   label: string;
   value: string;
@@ -21,16 +23,22 @@ function Field({
   flag?: string | undefined;
   placeholder?: string;
   className?: string;
+  optional?: boolean;
+  hint?: React.ReactNode;
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        {label}
-        {flag && (
-          <span className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1 text-[10px] font-semibold text-warning-foreground">
-            <AlertTriangle className="h-2.5 w-2.5" /> {flag}
-          </span>
-        )}
+      <span className="mb-1 flex items-center justify-between gap-1.5 text-xs font-medium text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          {label}
+          {optional && <span className="text-[10px] text-muted-foreground/70">(Optional)</span>}
+          {flag && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1 text-[10px] font-semibold text-warning-foreground">
+              <AlertTriangle className="h-2.5 w-2.5" /> {flag}
+            </span>
+          )}
+        </span>
+        {hint}
       </span>
       <Input
         value={value}
@@ -48,28 +56,49 @@ const cellInput =
 export function InvoiceEditor({ value: inv, onChange }: Props) {
   const set = <K extends keyof InvoiceData>(k: K, v: InvoiceData[K]) =>
     onChange({ ...inv, [k]: v });
+
   const setItem = (id: string, patch: Partial<LineItem>) =>
     set(
       "items",
       inv.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
     );
-  const totals = calcTotals(inv.items, inv.whtRate);
+
+  const totals = calcTotals(inv.items, inv);
   const req = (v: string) => (v.trim() ? undefined : "Missing");
   const opt = (v: string) => (v.trim() ? undefined : "Not in source");
-  const rateBad = toDec(inv.whtRate) === null;
+
+  const rate1Bad = toDec(inv.wht1Rate) === null;
+  const rate2Bad = toDec(inv.wht2Rate) === null;
   const src = toDec(inv.sourceTotal);
   const srcDiff = src ? totals.totalSales.sub(src).abs() : null;
 
   return (
     <div className="space-y-5">
       <section className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold">Invoice details</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Invoice details</h2>
+          <span className="text-xs text-muted-foreground">
+            Print font: <strong className="text-foreground">Times New Roman</strong>
+          </span>
+        </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field
-            label="Invoice No."
+            label="Invoice No. (Printable)"
             value={inv.invoiceNumber}
             onChange={(v) => set("invoiceNumber", v)}
-            flag={req(inv.invoiceNumber)}
+            placeholder="Enter target invoice number"
+            hint={
+              inv.sourceInvoiceNumber ? (
+                <button
+                  type="button"
+                  onClick={() => set("invoiceNumber", inv.sourceInvoiceNumber || "")}
+                  className="flex items-center gap-0.5 text-[10px] text-primary hover:underline"
+                  title="Click to copy detected source number into target printable invoice number"
+                >
+                  Detected: {inv.sourceInvoiceNumber} <ArrowRight className="h-2.5 w-2.5" />
+                </button>
+              ) : undefined
+            }
           />
           <Field
             label="Date"
@@ -88,7 +117,8 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="Reference / PO No."
             value={inv.poNumber}
             onChange={(v) => set("poNumber", v)}
-            flag={inv.type === "charge" ? opt(inv.poNumber) : undefined}
+            optional
+            placeholder="e.g. PO-12345 (Optional)"
           />
           <Field
             label="Registered name (Customer)"
@@ -101,26 +131,30 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="TIN"
             value={inv.tin}
             onChange={(v) => set("tin", v)}
-            placeholder="Optional"
+            optional
+            placeholder="123-456-789-000"
           />
           <Field
             label="Terms"
             value={inv.terms}
             onChange={(v) => set("terms", v)}
-            flag={inv.type === "charge" ? opt(inv.terms) : undefined}
+            optional
+            placeholder="e.g. 30 Days"
           />
           <Field
             label="Business address"
             value={inv.address}
             onChange={(v) => set("address", v)}
-            flag={opt(inv.address)}
+            optional
             className="col-span-2 md:col-span-3"
+            placeholder="Customer business address (Optional)"
           />
           <Field
             label="Due date"
             value={inv.dueDate}
             onChange={(v) => set("dueDate", v)}
-            flag={inv.type === "charge" ? opt(inv.dueDate) : undefined}
+            optional
+            placeholder="MM/DD/YYYY"
           />
         </div>
       </section>
@@ -232,11 +266,15 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-[1fr_340px]">
+      <section className="grid gap-4 md:grid-cols-[1fr_360px]">
         <div className="space-y-2 text-xs text-muted-foreground">
           <p>
             Unit price (VAT inc.) = original unit price × 1.12, rounded to centavos. Amount =
             VAT-inclusive unit price × quantity.
+          </p>
+          <p>
+            Withholding taxes are calculated independently using Total Sales (VAT Inclusive) as base:
+            WHT 1 = Total Sales × Rate 1, WHT 2 = Total Sales × Rate 2.
           </p>
           {srcDiff && srcDiff.gt(0.009) && (
             <p className="flex items-start gap-1.5 rounded-md bg-warning-soft p-2 text-warning-foreground">
@@ -246,30 +284,73 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             </p>
           )}
         </div>
-        <div className="rounded-lg border bg-card p-4 text-sm">
+        <div className="rounded-lg border bg-card p-4 text-sm space-y-1.5">
           <Row label="Total Sales (VAT Inclusive)" v={peso(totals.totalSales)} />
           <Row label="Less: VAT" v={peso(totals.vat)} />
           <Row label="Amount: Net of VAT" v={peso(totals.net)} />
-          <div className="flex items-center justify-between gap-2 py-1.5">
-            <span className="flex items-center gap-1.5">
-              Less: Withholding Tax
+
+          {/* Withholding Tax 1 */}
+          <div className="flex items-center justify-between gap-2 py-1 border-t pt-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={inv.wht1Enabled !== false}
+                onChange={(e) => set("wht1Enabled", e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-input accent-primary"
+              />
+              <span>Less: WHT 1</span>
               <span className="relative">
                 <input
-                  aria-label="Withholding tax rate"
-                  value={inv.whtRate}
-                  onChange={(e) => set("whtRate", e.target.value)}
+                  aria-label="Withholding tax 1 rate"
+                  value={inv.wht1Rate}
+                  disabled={inv.wht1Enabled === false}
+                  onChange={(e) => set("wht1Rate", e.target.value)}
                   className={cn(
-                    "num h-7 w-14 rounded border border-input bg-card px-1.5 pr-4 text-right text-xs",
-                    rateBad && "border-warning bg-warning-soft",
+                    "num h-6 w-12 rounded border border-input bg-card px-1 pr-3.5 text-right text-xs",
+                    rate1Bad && "border-warning bg-warning-soft",
                   )}
                 />
-                <span className="pointer-events-none absolute right-1.5 top-1.5 text-xs text-muted-foreground">
+                <span className="pointer-events-none absolute right-1 top-1 text-[10px] text-muted-foreground">
                   %
                 </span>
               </span>
+            </label>
+            <span className="num text-xs text-destructive">
+              {totals.wht1Enabled && totals.wht1.gt(0) ? `(${peso(totals.wht1)})` : "₱0.00"}
             </span>
-            <span className="num text-destructive">({peso(totals.wht)})</span>
           </div>
+
+          {/* Withholding Tax 2 */}
+          <div className="flex items-center justify-between gap-2 py-1">
+            <label className="flex items-center gap-2 cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={inv.wht2Enabled === true}
+                onChange={(e) => set("wht2Enabled", e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-input accent-primary"
+              />
+              <span>Less: WHT 2</span>
+              <span className="relative">
+                <input
+                  aria-label="Withholding tax 2 rate"
+                  value={inv.wht2Rate}
+                  disabled={!inv.wht2Enabled}
+                  onChange={(e) => set("wht2Rate", e.target.value)}
+                  className={cn(
+                    "num h-6 w-12 rounded border border-input bg-card px-1 pr-3.5 text-right text-xs",
+                    rate2Bad && "border-warning bg-warning-soft",
+                  )}
+                />
+                <span className="pointer-events-none absolute right-1 top-1 text-[10px] text-muted-foreground">
+                  %
+                </span>
+              </span>
+            </label>
+            <span className="num text-xs text-destructive">
+              {totals.wht2Enabled && totals.wht2.gt(0) ? `(${peso(totals.wht2)})` : "₱0.00"}
+            </span>
+          </div>
+
           <div className="mt-2 flex items-center justify-between border-t pt-3">
             <span className="font-semibold">TOTAL AMOUNT DUE</span>
             <span className="num text-lg font-semibold text-primary">{peso(totals.due)}</span>
@@ -282,7 +363,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
 
 function Row({ label, v }: { label: string; v: string }) {
   return (
-    <div className="flex justify-between py-1.5">
+    <div className="flex justify-between py-1">
       <span>{label}</span>
       <span className="num">{v}</span>
     </div>

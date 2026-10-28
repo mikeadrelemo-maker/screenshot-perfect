@@ -136,7 +136,12 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
         .trim(),
     )
     .filter(Boolean);
-  inv.invoiceNumber = clean(refLines[0] ?? "");
+
+  const detectedNumber = clean(refLines[0] ?? "");
+  // Requirement 5: Preserve detected source invoice number for reference/diagnostics,
+  // but do NOT automatically copy it into the target printable invoiceNumber.
+  inv.sourceInvoiceNumber = detectedNumber;
+  inv.invoiceNumber = ""; // blank by default until user enters target invoice number
   inv.salesRep = clean(refLines[1] ?? "");
 
   // Source "Total" (top value of the totals column)
@@ -146,10 +151,9 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
   const tot = totalLine?.tokens.find((t) => t.x > 480 && isNum(t.str));
   if (tot) inv.sourceTotal = num(tot.str);
 
-  if (/^CI-/i.test(inv.invoiceNumber)) inv.type = "cash";
+  if (/^CI-/i.test(detectedNumber)) inv.type = "cash";
   else inv.type = "charge";
 
-  if (!inv.invoiceNumber) warnings.push("Invoice / reference number not found.");
   if (!inv.date) warnings.push("Invoice date not found.");
   if (!inv.customer) warnings.push("Customer name not found.");
   if (inv.items.length === 0) warnings.push("No item rows were recognised in this PDF.");

@@ -68,7 +68,8 @@ describe("Invoice Layout System & Print Specifications", () => {
     expect(fieldTypes).toContain("totalSales");
     expect(fieldTypes).toContain("vat");
     expect(fieldTypes).toContain("net");
-    expect(fieldTypes).toContain("wht");
+    expect(fieldTypes).toContain("wht1");
+    expect(fieldTypes).toContain("wht2");
     expect(fieldTypes).toContain("due");
   });
 

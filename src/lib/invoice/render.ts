@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { calcLine, calcTotals, peso } from "./calc";
 import type { InvoiceData } from "./types";
@@ -11,25 +11,40 @@ import {
 } from "./layout-types";
 import { loadActiveLayout } from "./layout-store";
 
+// Vite asset imports resolve to exact hashed asset URLs across dev and production builds
+import timesRomanUrl from "@/assets/fonts/TimesNewRoman.ttf?url";
+import timesRomanBoldUrl from "@/assets/fonts/TimesNewRoman-Bold.ttf?url";
+
 export const ROWS_PER_PAGE = 10;
 
-// Font asset cache — template background images are never loaded into PDFs.
 const assetCache = new Map<string, Promise<ArrayBuffer>>();
-const loadAsset = (url: string) => {
-  if (!assetCache.has(url)) {
-    assetCache.set(
-      url,
-      fetch(url).then((r) => {
-        if (!r.ok) throw new Error(`Could not load ${url}`);
-        return r.arrayBuffer();
-      }),
-    );
+
+async function fetchFontArrayBuffer(candidates: string[]): Promise<ArrayBuffer | null> {
+  for (const url of candidates) {
+    if (!url) continue;
+    try {
+      if (assetCache.has(url)) {
+        return await assetCache.get(url)!;
+      }
+      const fetchPromise = (async () => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+        return await res.arrayBuffer();
+      })();
+      assetCache.set(url, fetchPromise);
+      const data = await fetchPromise;
+      if (data && data.byteLength > 1000) {
+        return data;
+      }
+    } catch {
+      assetCache.delete(url);
+      // Try next candidate URL
+    }
   }
-  return assetCache.get(url)!;
-};
+  return null;
+}
 
 const INK = rgb(0.05, 0.07, 0.16);
-const RED = rgb(0.78, 0.12, 0.15);
 
 function parseColor(hex: string | undefined, fallback = INK) {
   if (!hex || !hex.startsWith("#")) return fallback;
@@ -43,10 +58,13 @@ function parseColor(hex: string | undefined, fallback = INK) {
   return fallback;
 }
 
-/** Render a fully customized invoice PDF with Letter dimensions and custom field layouts.
- *  The final PDF is text-only on a blank page — the scanned template background is never
- *  embedded or printed. The editor canvas may display the template as a positioning guide,
- *  but it is intentionally excluded from all print and PDF output. */
+/**
+ * Render a clean, text-only invoice PDF using Times New Roman typography on Letter-size paper.
+ * - Template background artwork is intentionally NOT rendered in the PDF.
+ * - Supports independent multiple withholding taxes (WHT 1 and WHT 2).
+ * - Optional fields (Business Address, Reference/PO No.) render only when supplied.
+ * - Detected source invoice number is not printed automatically unless manually entered.
+ */
 export async function renderInvoicePdf(
   inv: InvoiceData,
   customLayout?: InvoiceLayout,
@@ -58,15 +76,46 @@ export async function renderInvoicePdf(
   doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
-  // Load only fonts — the template background image is intentionally NOT loaded or embedded.
-  // Use import.meta.env.BASE_URL so the paths work on GitHub Pages (sub-path) and locally (/).
   const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
-  const [reg, bold] = await Promise.all([
-    loadAsset(`${base}fonts/DejaVuSans.ttf`),
-    loadAsset(`${base}fonts/DejaVuSans-Bold.ttf`),
+
+  // Attempt to load genuine Times New Roman fonts via multiple resilient paths:
+  const [regBytes, boldBytes] = await Promise.all([
+    fetchFontArrayBuffer([
+      timesRomanUrl,
+      `${base}fonts/TimesNewRoman.ttf`,
+      "/fonts/TimesNewRoman.ttf",
+      "./fonts/TimesNewRoman.ttf",
+      "fonts/TimesNewRoman.ttf",
+    ]),
+    fetchFontArrayBuffer([
+      timesRomanBoldUrl,
+      `${base}fonts/TimesNewRoman-Bold.ttf`,
+      "/fonts/TimesNewRoman-Bold.ttf",
+      "./fonts/TimesNewRoman-Bold.ttf",
+      "fonts/TimesNewRoman-Bold.ttf",
+    ]),
   ]);
-  const font = await doc.embedFont(reg, { subset: true });
-  const fontB = await doc.embedFont(bold, { subset: true });
+
+  let font: PDFFont;
+  let fontB: PDFFont;
+  let isStandardFont = false;
+
+  if (regBytes && boldBytes) {
+    try {
+      font = await doc.embedFont(regBytes, { subset: true });
+      fontB = await doc.embedFont(boldBytes, { subset: true });
+    } catch {
+      // Fallback to built-in standard TimesRoman if fontkit parsing encounters an issue
+      font = await doc.embedFont(StandardFonts.TimesRoman);
+      fontB = await doc.embedFont(StandardFonts.TimesRomanBold);
+      isStandardFont = true;
+    }
+  } else {
+    // Graceful offline / zero-network fallback: standard PDF Times-Roman
+    font = await doc.embedFont(StandardFonts.TimesRoman);
+    fontB = await doc.embedFont(StandardFonts.TimesRomanBold);
+    isStandardFont = true;
+  }
 
   const pageW = mmToPt(layout.pageWidthMm || LETTER_WIDTH_MM);
   const pageH = mmToPt(layout.pageHeightMm || LETTER_HEIGHT_MM);
@@ -90,19 +139,31 @@ export async function renderInvoicePdf(
     return { x, y, w, h };
   };
 
+  const sanitizeText = (rawStr: string) => {
+    if (!rawStr) return "";
+    // If standard 14 font fallback is active, replace Philippine Peso sign with PHP
+    // because WinAnsiEncoding in standard Type 1 fonts cannot encode Unicode \u20B1
+    if (isStandardFont) {
+      return rawStr.replace(/₱/g, "PHP ");
+    }
+    return rawStr;
+  };
+
   const drawFieldText = (
     p: PDFPage,
     field: LayoutField | undefined,
-    str: string,
+    rawStr: string,
     overrideFont?: PDFFont,
   ) => {
-    if (!field || !field.visible || !str) return;
+    if (!field || !field.visible || !rawStr) return;
+    const str = sanitizeText(rawStr);
+    if (!str.trim()) return;
+
     const { x, y, w, h } = toPdfBox(field);
     const f = overrideFont || (field.fontWeight === "bold" ? fontB : font);
     const color = parseColor(field.color, INK);
     const sz = field.fontSize || 8;
 
-    // Single-line or fitted text within width
     const textWidth = f.widthOfTextAtSize(str, sz);
     let textX = x;
     if (field.align === "right") {
@@ -111,11 +172,9 @@ export async function renderInvoicePdf(
       textX = x + (w - textWidth) / 2;
     }
 
-    // Baseline placement in vertical center of field height
     const baselineY = y + (h - sz) / 2 + sz * 0.15;
 
     if (field.wrapText && textWidth > w) {
-      // Split into lines
       const words = str.split(" ");
       const lines: string[] = [];
       let current = "";
@@ -143,7 +202,6 @@ export async function renderInvoicePdf(
         startY -= lineHeight;
       }
     } else {
-      // If single line exceeds width, auto shrink down to 6pt if needed
       let actualSize = sz;
       if (textWidth > w && w > 10) {
         while (actualSize > 6 && f.widthOfTextAtSize(str, actualSize) > w) {
@@ -158,17 +216,14 @@ export async function renderInvoicePdf(
     }
   };
 
-  const totals = calcTotals(inv.items, inv.whtRate);
+  const totals = calcTotals(inv.items, inv);
   const rowsPerPage = layout.tableConfig?.rowCount || ROWS_PER_PAGE;
   const pageCount = Math.max(1, Math.ceil(inv.items.length / rowsPerPage));
 
   for (let pi = 0; pi < pageCount; pi++) {
     const p = doc.addPage([pageW, pageH]);
 
-    // The template background image is intentionally NOT drawn in the PDF.
-    // The output is text-only on a blank Letter-size page.
-
-    // Invoice Serial Number
+    // Printable Invoice Number (only rendered if user entered a value)
     const fSerial = getField("invoiceNumber");
     if (fSerial && fSerial.visible && inv.invoiceNumber) {
       drawFieldText(p, fSerial, inv.invoiceNumber, fontB);
@@ -178,10 +233,10 @@ export async function renderInvoicePdf(
     drawFieldText(p, getField("date"), inv.date);
     drawFieldText(p, getField("customer"), inv.customer);
     drawFieldText(p, getField("tin"), inv.tin);
-    drawFieldText(p, getField("address"), inv.address);
+    drawFieldText(p, getField("address"), inv.address); // optional
     drawFieldText(p, getField("terms"), inv.terms);
     drawFieldText(p, getField("dueDate"), inv.dueDate);
-    drawFieldText(p, getField("poNumber"), inv.poNumber);
+    drawFieldText(p, getField("poNumber"), inv.poNumber); // optional
 
     const fSalesRep = getField("salesRep");
     if (fSalesRep && fSalesRep.visible && inv.salesRep) {
@@ -195,8 +250,8 @@ export async function renderInvoicePdf(
     const fColUnit = getField("colUnit");
     const fColAmount = getField("colAmount");
 
-    const rowTop = layout.tableConfig?.rowTopMm || 81.5;
-    const rowH = layout.tableConfig?.rowHeightMm || 6.3;
+    const rowTop = layout.tableConfig?.rowTopMm || (inv.type === "charge" ? 81.5 : 86.0);
+    const rowH = layout.tableConfig?.rowHeightMm || (inv.type === "charge" ? 6.3 : 6.25);
 
     const slice = inv.items.slice(pi * rowsPerPage, (pi + 1) * rowsPerPage);
     slice.forEach((it, i) => {
@@ -243,7 +298,25 @@ export async function renderInvoicePdf(
       drawFieldText(p, getField("totalSales"), peso(totals.totalSales));
       drawFieldText(p, getField("vat"), peso(totals.vat));
       drawFieldText(p, getField("net"), peso(totals.net));
-      drawFieldText(p, getField("wht"), `(${peso(totals.wht)})`);
+
+      // Withholding Tax 1 deduction
+      if (totals.wht1Enabled && totals.wht1.gt(0)) {
+        drawFieldText(
+          p,
+          getField("wht1") || getField("wht"),
+          `(${peso(totals.wht1)})`,
+        );
+      }
+
+      // Withholding Tax 2 deduction
+      if (totals.wht2Enabled && totals.wht2.gt(0)) {
+        drawFieldText(
+          p,
+          getField("wht2"),
+          `(${peso(totals.wht2)})`,
+        );
+      }
+
       drawFieldText(p, getField("due"), peso(totals.due), fontB);
       drawFieldText(p, getField("vatableSales"), peso(totals.net));
       drawFieldText(p, getField("vatAmount"), peso(totals.vat));

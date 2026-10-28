@@ -11,6 +11,7 @@ import {
   type LayoutField,
 } from "@/lib/invoice/layout-types";
 import {
+  autoSaveLayout,
   exportLayoutToJson,
   importLayoutFromJson,
   loadActiveLayout,
@@ -41,6 +42,10 @@ function createSampleInvoice(type: InvoiceType): InvoiceData {
     dueDate: "11/26/2026",
     poNumber: "PO-99201",
     salesRep: "Juan Dela Cruz",
+    wht1Rate: "1",
+    wht1Enabled: true,
+    wht2Rate: "5",
+    wht2Enabled: true,
     whtRate: "1",
     items: [
       {
@@ -88,6 +93,11 @@ export function InvoiceLayoutEditor({
   const [zoom, setZoom] = useState<number>(0.9);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<"canvas" | "pdf">("canvas");
+
+  // Automatic debounced persistence to browser localStorage
+  useEffect(() => {
+    autoSaveLayout(layout);
+  }, [layout]);
 
   // Undo / Redo history stacks
   const [history, setHistory] = useState<InvoiceLayout[]>([loadActiveLayout(initialType)]);

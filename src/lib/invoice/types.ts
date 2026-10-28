@@ -11,16 +11,22 @@ export interface LineItem {
 export interface InvoiceData {
   id: string;
   type: InvoiceType;
-  invoiceNumber: string;
+  invoiceNumber: string; // target printable invoice number (empty by default)
+  sourceInvoiceNumber?: string; // detected from uploaded source PDF (not automatically printed)
   date: string;
   customer: string;
   tin: string;
-  address: string;
+  address: string; // optional business address
   terms: string;
   dueDate: string;
-  poNumber: string;
+  poNumber: string; // optional reference / PO number
   salesRep: string;
-  whtRate: string; // percent, default "1"
+  // Multiple withholding taxes:
+  wht1Rate: string; // default "1"
+  wht1Enabled: boolean; // default true
+  wht2Rate: string; // default "5"
+  wht2Enabled: boolean; // default false
+  whtRate?: string; // legacy fallback
   items: LineItem[];
   sourceFile?: string;
   sourceTotal?: string; // total printed on the source PDF, for cross-checking
@@ -38,6 +44,7 @@ export function emptyInvoice(type: InvoiceType = "charge"): InvoiceData {
     id: newId(),
     type,
     invoiceNumber: "",
+    sourceInvoiceNumber: "",
     date: "",
     customer: "",
     tin: "",
@@ -46,7 +53,10 @@ export function emptyInvoice(type: InvoiceType = "charge"): InvoiceData {
     dueDate: "",
     poNumber: "",
     salesRep: "",
-    whtRate: "1",
+    wht1Rate: "1",
+    wht1Enabled: true,
+    wht2Rate: "5",
+    wht2Enabled: false,
     items: [],
     status: "draft",
     updatedAt: new Date().toISOString(),

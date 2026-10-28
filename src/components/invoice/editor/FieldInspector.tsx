@@ -187,6 +187,19 @@ export function FieldInspector({
           Typography & Style
         </Label>
 
+        <div>
+          <Label className="text-[11px] text-muted-foreground">Font Family</Label>
+          <select
+            value={field.fontFamily || "Times New Roman"}
+            onChange={(e) => onUpdateField({ ...field, fontFamily: e.target.value })}
+            className="mt-1 h-8 w-full rounded border border-input bg-card px-2 text-xs"
+          >
+            <option value="Times New Roman">Times New Roman (Standard)</option>
+            <option value="Liberation Serif">Liberation Serif (Compatible)</option>
+            <option value="DejaVu Sans">DejaVu Sans</option>
+          </select>
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-[11px] text-muted-foreground">Font Size (pt)</Label>

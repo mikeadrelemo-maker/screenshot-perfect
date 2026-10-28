@@ -32,6 +32,7 @@ function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceType): Inv
           h: typeof f.h === "number" && f.h > 0 ? f.h : 6,
           fontSize: typeof f.fontSize === "number" && f.fontSize >= 5 ? f.fontSize : 8,
           fontWeight: f.fontWeight === "bold" ? "bold" : "normal",
+          fontFamily: typeof f.fontFamily === "string" ? f.fontFamily : "Times New Roman",
           align: f.align === "center" || f.align === "right" ? f.align : "left",
           color: typeof f.color === "string" ? f.color : "#0d1329",
           visible: f.visible !== false,
@@ -134,6 +135,17 @@ export function saveActiveLayout(layout: InvoiceLayout): void {
   } catch (err) {
     console.error("Failed to save invoice layout to localStorage:", err);
   }
+}
+
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced auto-save layout to localStorage */
+export function autoSaveLayout(layout: InvoiceLayout, delayMs = 800): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    saveActiveLayout(layout);
+  }, delayMs);
 }
 
 /** Restore default factory layout for a given invoice type */
