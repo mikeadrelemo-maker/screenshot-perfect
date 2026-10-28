@@ -10,26 +10,11 @@ import {
   type LayoutField,
 } from "./layout-types";
 import { loadActiveLayout } from "./layout-store";
+import { loadInvoiceFont, type InvoiceFontFamily } from "./fonts";
 
 export const ROWS_PER_PAGE = 10;
 
-// Font asset cache — template background images are never loaded into PDFs.
-const assetCache = new Map<string, Promise<ArrayBuffer>>();
-const loadAsset = (url: string) => {
-  if (!assetCache.has(url)) {
-    assetCache.set(
-      url,
-      fetch(url).then((r) => {
-        if (!r.ok) throw new Error(`Could not load ${url}`);
-        return r.arrayBuffer();
-      }),
-    );
-  }
-  return assetCache.get(url)!;
-};
-
 const INK = rgb(0.05, 0.07, 0.16);
-const RED = rgb(0.78, 0.12, 0.15);
 
 function parseColor(hex: string | undefined, fallback = INK) {
   if (!hex || !hex.startsWith("#")) return fallback;
@@ -59,12 +44,16 @@ export async function renderInvoicePdf(
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
   // Load only fonts — the template background image is intentionally NOT loaded or embedded.
-  const [reg, bold] = await Promise.all([
-    loadAsset("/fonts/DejaVuSans.ttf"),
-    loadAsset("/fonts/DejaVuSans-Bold.ttf"),
-  ]);
-  const font = await doc.embedFont(reg, { subset: true });
-  const fontB = await doc.embedFont(bold, { subset: true });
+  const families = new Set<InvoiceFontFamily>(["Liberation Serif"]);
+  layout.fields.forEach((field) => families.add(field.fontFamily || "Liberation Serif"));
+  const fonts = new Map<InvoiceFontFamily, { regular: PDFFont; bold: PDFFont }>();
+  await Promise.all([...families].map(async (family) => {
+    const [reg, bold] = await Promise.all([loadInvoiceFont(family), loadInvoiceFont(family, true)]);
+    fonts.set(family, {
+      regular: await doc.embedFont(reg, { subset: true }),
+      bold: await doc.embedFont(bold, { subset: true }),
+    });
+  }));
 
   const pageW = mmToPt(layout.pageWidthMm || LETTER_WIDTH_MM);
   const pageH = mmToPt(layout.pageHeightMm || LETTER_HEIGHT_MM);
@@ -92,11 +81,13 @@ export async function renderInvoicePdf(
     p: PDFPage,
     field: LayoutField | undefined,
     str: string,
-    overrideFont?: PDFFont,
+    forceBold = false,
   ) => {
     if (!field || !field.visible || !str) return;
     const { x, y, w, h } = toPdfBox(field);
-    const f = overrideFont || (field.fontWeight === "bold" ? fontB : font);
+    const familyFonts = fonts.get(field.fontFamily || "Liberation Serif");
+    if (!familyFonts) throw new Error("Invoice font was not registered.");
+    const f = forceBold || field.fontWeight === "bold" ? familyFonts.bold : familyFonts.regular;
     const color = parseColor(field.color, INK);
     const sz = field.fontSize || 8;
 
@@ -156,7 +147,7 @@ export async function renderInvoicePdf(
     }
   };
 
-  const totals = calcTotals(inv.items, inv.whtRate);
+  const totals = calcTotals(inv.items, inv.whtRate, inv.whtRate2, inv.whtEnabled, inv.whtEnabled2);
   const rowsPerPage = layout.tableConfig?.rowCount || ROWS_PER_PAGE;
   const pageCount = Math.max(1, Math.ceil(inv.items.length / rowsPerPage));
 
@@ -169,7 +160,7 @@ export async function renderInvoicePdf(
     // Invoice Serial Number
     const fSerial = getField("invoiceNumber");
     if (fSerial && fSerial.visible && inv.invoiceNumber) {
-      drawFieldText(p, fSerial, inv.invoiceNumber, fontB);
+      drawFieldText(p, fSerial, inv.invoiceNumber, true);
     }
 
     // Header fields
@@ -218,10 +209,10 @@ export async function renderInvoicePdf(
 
       drawRowCol(fColItem, it.item);
       drawRowCol(fColDesc, it.description);
-      drawRowCol(fColQty, it.qty, "center");
+      drawRowCol(fColQty, it.qty);
       if (c.valid) {
-        drawRowCol(fColUnit, peso(c.vatUnit), "right");
-        drawRowCol(fColAmount, peso(c.amount), "right");
+        drawRowCol(fColUnit, peso(c.vatUnit));
+        drawRowCol(fColAmount, peso(c.amount));
       }
     });
 
@@ -241,8 +232,9 @@ export async function renderInvoicePdf(
       drawFieldText(p, getField("totalSales"), peso(totals.totalSales));
       drawFieldText(p, getField("vat"), peso(totals.vat));
       drawFieldText(p, getField("net"), peso(totals.net));
-      drawFieldText(p, getField("wht"), `(${peso(totals.wht)})`);
-      drawFieldText(p, getField("due"), peso(totals.due), fontB);
+      drawFieldText(p, getField("wht"), `Tax 1 (${inv.whtRate}%): (${peso(totals.wht)})`);
+      drawFieldText(p, getField("wht2"), `Tax 2 (${inv.whtRate2 ?? "5"}%): (${peso(totals.wht2)})`);
+      drawFieldText(p, getField("due"), peso(totals.due), true);
       drawFieldText(p, getField("vatableSales"), peso(totals.net));
       drawFieldText(p, getField("vatAmount"), peso(totals.vat));
     }

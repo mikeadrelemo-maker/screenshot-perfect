@@ -105,9 +105,10 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
   for (const l of lines.filter((l) => l.y > 220 && l.y < 440)) {
     const c = cells(l.tokens);
     if (c.length < 4) continue;
-    const amount = c[c.length - 1]!;
-    const price = c[c.length - 2]!;
-    const qty = c[c.length - 3]!;
+    const amount = c[c.length - 1];
+    const price = c[c.length - 2];
+    const qty = c[c.length - 3];
+    if (!amount || !price || !qty) continue;
     if (!isNum(amount.str) || !isNum(price.str) || !isNum(qty.str)) continue;
     const left = c.slice(0, c.length - 3);
     const first = left[0];
@@ -136,7 +137,7 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
         .trim(),
     )
     .filter(Boolean);
-  inv.invoiceNumber = clean(refLines[0] ?? "");
+  inv.sourceInvoiceNumber = clean(refLines[0] ?? "");
   inv.salesRep = clean(refLines[1] ?? "");
 
   // Source "Total" (top value of the totals column)
@@ -146,10 +147,10 @@ export function parseSosTokens(tokens: TextToken[], fileName = ""): ParseResult 
   const tot = totalLine?.tokens.find((t) => t.x > 480 && isNum(t.str));
   if (tot) inv.sourceTotal = num(tot.str);
 
-  if (/^CI-/i.test(inv.invoiceNumber)) inv.type = "cash";
+  if (/^CI-/i.test(inv.sourceInvoiceNumber)) inv.type = "cash";
   else inv.type = "charge";
 
-  if (!inv.invoiceNumber) warnings.push("Invoice / reference number not found.");
+  if (!inv.sourceInvoiceNumber) warnings.push("Source invoice / reference number not found.");
   if (!inv.date) warnings.push("Invoice date not found.");
   if (!inv.customer) warnings.push("Customer name not found.");
   if (inv.items.length === 0) warnings.push("No item rows were recognised in this PDF.");
