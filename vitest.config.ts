@@ -1,8 +1,10 @@
+
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
 export default defineConfig({
+  base: "/screenshot-perfect/",
   plugins: [react()],
   test: {
     environment: "jsdom",
