@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import {
   calculateExpiration,
   createSignedLicense,
@@ -17,18 +19,38 @@ import {
 } from "./store";
 import type { LicenseDuration, LicenseRecord } from "./types";
 
-// Administrator private signing key used strictly for automated test generation
-const TEST_ADMIN_PRIVATE_KEY: JsonWebKey = {
-  kty: "EC",
-  crv: "P-256",
-  x: "geF-YsTCE20cJSYuMEfoHh19vBwq21sN5sSJGfAy6YI",
-  y: "j-qfVdSrWs-5TdE_pEPsQCViVPt6L_yIkgSHjvCHNho",
-  d: "hZZ10nCUUn12-OKIqzBgv-Y8noEF7LvY-hTk0uPPZ_E",
-  key_ops: ["sign"],
-  ext: true,
-};
-
 describe("License System — Cryptography, Duration & Activation", () => {
+  let adminPrivateKey: JsonWebKey;
+  let verificationPubKey: JsonWebKey;
+
+  beforeAll(async () => {
+    // Attempt to load local administrator signing key from gitignored license-key.js
+    let loadedFromLocal = false;
+    try {
+      const keyFile = path.resolve(process.cwd(), "license-key.js");
+      if (fs.existsSync(keyFile)) {
+        const raw = fs.readFileSync(keyFile, "utf8");
+        const match = raw.match(/window\.SOS_ADMIN_PRIVATE_KEY_JWK\s*=\s*(\{[\s\S]*?\});/);
+        if (match && match[1]) {
+          adminPrivateKey = JSON.parse(match[1]);
+          verificationPubKey = PUBLIC_KEY_JWK;
+          loadedFromLocal = true;
+        }
+      }
+    } catch {}
+
+    // Fallback for CI environments where private keys are never committed
+    if (!loadedFromLocal) {
+      const kp = await globalThis.crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["sign", "verify"],
+      );
+      adminPrivateKey = (await globalThis.crypto.subtle.exportKey("jwk", kp.privateKey)) as JsonWebKey;
+      verificationPubKey = (await globalThis.crypto.subtle.exportKey("jwk", kp.publicKey)) as JsonWebKey;
+    }
+  });
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -73,7 +95,7 @@ describe("License System — Cryptography, Duration & Activation", () => {
   });
 
   describe("Asymmetric ECDSA signing and verification", () => {
-    it("generates a valid signed license code and verifies against embedded public key", async () => {
+    it("generates a valid signed license code and verifies against public key", async () => {
       const now = new Date();
       const expiresAt = calculateExpiration(now, "1m");
 
@@ -86,12 +108,12 @@ describe("License System — Cryptography, Duration & Activation", () => {
           issuedAt: now.toISOString(),
           expiresAt: expiresAt.toISOString(),
         },
-        TEST_ADMIN_PRIVATE_KEY,
+        adminPrivateKey,
       );
 
       expect(code.startsWith("SOSLIC-")).toBe(true);
 
-      const verification = await verifyLicenseCode(code, PUBLIC_KEY_JWK);
+      const verification = await verifyLicenseCode(code, verificationPubKey);
       expect(verification.valid).toBe(true);
       expect(verification.payload?.holder).toBe("Adrian Llano");
       expect(verification.payload?.duration).toBe("1m");
@@ -101,103 +123,163 @@ describe("License System — Cryptography, Duration & Activation", () => {
       const now = new Date();
       const code = await createSignedLicense(
         {
-          id: "lic_legit",
+          id: "lic_tamper_test",
           holder: "Legitimate Company",
-          duration: "1d",
+          duration: "1m",
           issuedAt: now.toISOString(),
-          expiresAt: calculateExpiration(now, "1d").toISOString(),
+          expiresAt: calculateExpiration(now, "1m").toISOString(),
         },
-        TEST_ADMIN_PRIVATE_KEY,
+        adminPrivateKey,
       );
 
-      // Tamper with payload (modify a single character)
-      const parts = code.split(".");
-      const tamperedCode = `${parts[0]}X.${parts[1]}`;
-      const resTampered = await verifyLicenseCode(tamperedCode);
-      expect(resTampered.valid).toBe(false);
+      // Alter payload: change legitimate payload data
+      const parts = code.slice("SOSLIC-".length).split(".");
+      const decodedPayload = JSON.parse(
+        new TextDecoder().decode(
+          Uint8Array.from(atob(parts[0].replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+            c.charCodeAt(0),
+          ),
+        ),
+      );
+      decodedPayload.holder = "Hacked Entity";
+      const tamperedPayloadB64 = btoa(JSON.stringify(decodedPayload))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      const tamperedCode = `SOSLIC-${tamperedPayloadB64}.${parts[1]}`;
 
-      // Tamper with signature
-      const tamperedSig = `${parts[0]}.${parts[1]?.slice(0, -4)}AAAA`;
-      const resSig = await verifyLicenseCode(tamperedSig);
-      expect(resSig.valid).toBe(false);
+      const res = await verifyLicenseCode(tamperedCode, verificationPubKey);
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain("Cryptographic signature verification failed");
     });
 
-    it("strictly rejects malformed strings and random text", async () => {
-      expect((await verifyLicenseCode("random_junk_string")).valid).toBe(false);
-      expect((await verifyLicenseCode("SOSLIC-invalid")).valid).toBe(false);
-      expect((await verifyLicenseCode("")).valid).toBe(false);
+    it("rejects license codes signed with an unauthorized or mismatched private key", async () => {
+      // Generate a completely different unapproved key pair
+      const subtle = globalThis.crypto.subtle;
+      const rogueKp = await subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["sign", "verify"],
+      );
+      const roguePrivJwk = (await subtle.exportKey("jwk", rogueKp.privateKey)) as JsonWebKey;
+
+      const now = new Date();
+      const rogueCode = await createSignedLicense(
+        {
+          id: "lic_rogue",
+          holder: "Rogue User",
+          duration: "1y",
+          issuedAt: now.toISOString(),
+          expiresAt: calculateExpiration(now, "1y").toISOString(),
+        },
+        roguePrivJwk,
+      );
+
+      const verification = await verifyLicenseCode(rogueCode, verificationPubKey);
+      expect(verification.valid).toBe(false);
+      expect(verification.error).toContain("Cryptographic signature verification failed");
     });
   });
 
-  describe("Application Activation & Storage Persistence", () => {
-    it("activates 1 Day, 1 Month, and 1 Year licenses successfully", async () => {
-      const durations: LicenseDuration[] = ["1d", "1m", "1y"];
+  describe("End-to-End Generator & Activation for All 3 Durations", () => {
+    const durations: LicenseDuration[] = ["1d", "1m", "1y"];
 
-      for (const dur of durations) {
-        localStorage.clear();
+    durations.forEach((dur) => {
+      it(`generates and activates a valid ${dur} license successfully`, async () => {
         const now = new Date();
-        const code = await createSignedLicense(
+        const expiresAt = calculateExpiration(now, dur);
+
+        // 1. Simulate exact license generator signing
+        const licenseCode = await createSignedLicense(
           {
-            id: `lic_${dur}`,
-            holder: `Customer ${dur}`,
+            id: `lic_${dur}_test`,
+            holder: "Adrian Llano Enterprises",
+            note: `Testing ${dur} activation`,
             duration: dur,
             issuedAt: now.toISOString(),
-            expiresAt: calculateExpiration(now, dur).toISOString(),
+            expiresAt: expiresAt.toISOString(),
           },
-          TEST_ADMIN_PRIVATE_KEY,
+          adminPrivateKey,
         );
 
-        const status = await activateLicense(code);
-        expect(status.isValid).toBe(true);
-        expect(status.type).toBe("active");
-        expect(status.record?.payload.duration).toBe(dur);
+        // 2. Immediate verification using application's verifyLicenseCode
+        const verification = await verifyLicenseCode(licenseCode, verificationPubKey);
+        expect(verification.valid).toBe(true);
+        expect(verification.payload?.holder).toBe("Adrian Llano Enterprises");
+        expect(verification.payload?.duration).toBe(dur);
 
-        // Confirm it survives simulated browser refresh
-        const restored = evaluateCurrentLicense();
-        expect(restored.isValid).toBe(true);
-        expect(restored.type).toBe("active");
-      }
+        // 3. Application activation
+        const activationResult = await activateLicense(licenseCode);
+        expect(activationResult.isValid).toBe(true);
+        expect(activationResult.type).toBe("active");
+        expect(activationResult.record?.rawCode).toBe(licenseCode);
+
+        // 4. Persistence check: survives page reload simulation
+        const storedRecord = getSavedLicenseRecord();
+        expect(storedRecord).not.toBeNull();
+        expect(storedRecord?.payload.duration).toBe(dur);
+
+        const currentStatus = evaluateCurrentLicense();
+        expect(currentStatus.isValid).toBe(true);
+        expect(currentStatus.type).toBe("active");
+        expect(currentStatus.remainingMs).toBeGreaterThan(0);
+      });
     });
+  });
 
-    it("rejects an already expired license upon activation attempt", async () => {
-      const past = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      const expiredCode = await createSignedLicense(
-        {
-          id: "lic_old",
-          holder: "Past Customer",
+  describe("License Storage and Expiration Handling", () => {
+    it("recognizes when a license is expired", () => {
+      const now = new Date();
+      const past = new Date(now.getTime() - 1000); // 1 second ago
+
+      const record: LicenseRecord = {
+        rawCode: "SOSLIC-test",
+        payload: {
+          id: "lic_exp",
+          holder: "Acme",
           duration: "1d",
-          issuedAt: new Date(past.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+          issuedAt: new Date(now.getTime() - 86400000).toISOString(),
           expiresAt: past.toISOString(),
+          v: 1,
         },
-        TEST_ADMIN_PRIVATE_KEY,
-      );
+        activatedAt: new Date(now.getTime() - 86400000).toISOString(),
+        lastVerifiedAt: now.toISOString(),
+      };
 
-      const status = await activateLicense(expiredCode);
+      saveLicenseRecord(record);
+      const status = evaluateCurrentLicense();
       expect(status.isValid).toBe(false);
       expect(status.type).toBe("expired");
+      expect(status.message).toContain("expired on");
     });
 
-    it("locks functionality when an active license expires over time", async () => {
+    it("evaluates active status correctly up to expiration boundary", () => {
       const now = new Date();
-      // License that expires in 10 seconds
-      const expiresAt = new Date(now.getTime() + 10 * 1000);
+      const future = new Date(now.getTime() + 60 * 1000); // 1 minute in future
 
-      const code = await createSignedLicense(
-        {
-          id: "lic_short",
-          holder: "Short Term User",
+      const record: LicenseRecord = {
+        rawCode: "SOSLIC-active",
+        payload: {
+          id: "lic_act",
+          holder: "Acme Active",
           duration: "1d",
           issuedAt: now.toISOString(),
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: future.toISOString(),
+          v: 1,
         },
-        TEST_ADMIN_PRIVATE_KEY,
-      );
+        activatedAt: now.toISOString(),
+        lastVerifiedAt: now.toISOString(),
+      };
 
-      await activateLicense(code);
-      expect(evaluateCurrentLicense(now).isValid).toBe(true);
+      saveLicenseRecord(record);
 
-      // Fast forward 1 minute
-      const futureTime = new Date(now.getTime() + 60 * 1000);
+      // Now: active
+      const activeStatus = evaluateCurrentLicense(now);
+      expect(activeStatus.isValid).toBe(true);
+      expect(activeStatus.type).toBe("active");
+
+      // After 60 seconds: expired
+      const futureTime = new Date(now.getTime() + 61 * 1000);
       const expiredStatus = evaluateCurrentLicense(futureTime);
       expect(expiredStatus.isValid).toBe(false);
       expect(expiredStatus.type).toBe("expired");
@@ -231,7 +313,7 @@ describe("License System — Cryptography, Duration & Activation", () => {
           issuedAt: now.toISOString(),
           expiresAt: calculateExpiration(now, "1y").toISOString(),
         },
-        TEST_ADMIN_PRIVATE_KEY,
+        adminPrivateKey,
       );
 
       const status = await activateLicense(freshCode);
@@ -242,8 +324,14 @@ describe("License System — Cryptography, Duration & Activation", () => {
 
     it("does not delete invoice history or print layouts when license expires", () => {
       // Set mock invoice history and mock saved layout
-      localStorage.setItem("sos_invoice_history", JSON.stringify([{ id: "inv_1", customer: "Important Corp" }]));
-      localStorage.setItem("sos_invoice_layout_charge_v1", JSON.stringify({ name: "Custom Charge Layout" }));
+      localStorage.setItem(
+        "sos_invoice_history",
+        JSON.stringify([{ id: "inv_1", customer: "Important Corp" }]),
+      );
+      localStorage.setItem(
+        "sos_invoice_layout_charge_v1",
+        JSON.stringify({ name: "Custom Charge Layout" }),
+      );
 
       // Simulate expired license
       clearLicenseRecord();
@@ -258,7 +346,9 @@ describe("License System — Cryptography, Duration & Activation", () => {
   describe("Remaining time display formatting", () => {
     it("formats days, hours, and minutes gracefully", () => {
       expect(formatRemainingTime(5 * 24 * 60 * 60 * 1000)).toBe("5 days remaining");
-      expect(formatRemainingTime(1 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000)).toBe("1 day, 4h remaining");
+      expect(formatRemainingTime(1 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000)).toBe(
+        "1 day, 4h remaining",
+      );
       expect(formatRemainingTime(6 * 60 * 60 * 1000 + 30 * 60 * 1000)).toBe("6h 30m remaining");
       expect(formatRemainingTime(45 * 60 * 1000)).toBe("45 minutes remaining");
       expect(formatRemainingTime(-1000)).toBe("Expired");

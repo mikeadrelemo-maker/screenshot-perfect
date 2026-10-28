@@ -8,8 +8,8 @@ import type { LicenseDuration, LicensePayload } from "./types";
 export const PUBLIC_KEY_JWK: JsonWebKey = {
   kty: "EC",
   crv: "P-256",
-  x: "geF-YsTCE20cJSYuMEfoHh19vBwq21sN5sSJGfAy6YI",
-  y: "j-qfVdSrWs-5TdE_pEPsQCViVPt6L_yIkgSHjvCHNho",
+  x: "TVxa-fVO9CQt7puZbExtXEtl6hbFLM8vB3pApvDweqw",
+  y: "NHm7mb6L7GVMJ09Bl-A-TWDWTBY1ucBj6lzYCbj7OKM",
   key_ops: ["verify"],
   ext: true,
 };
