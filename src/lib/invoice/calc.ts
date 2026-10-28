@@ -1,5 +1,5 @@
-import Decimal from "decimal.js";
-import type { LineItem, InvoiceData } from "./types";
+﻿import Decimal from "decimal.js";
+import type { LineItem } from "./types";
 
 Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 
@@ -16,7 +16,7 @@ export const r2 = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 export interface LineCalc {
   vatUnit: Decimal; // VAT-inclusive unit price, rounded to 2dp
-  amount: Decimal; // vatUnit × qty, 2dp
+  amount: Decimal;  // vatUnit × qty, 2dp
   valid: boolean;
 }
 
@@ -29,53 +29,76 @@ export function calcLine(item: Pick<LineItem, "qty" | "unitPrice">): LineCalc {
 }
 
 export interface Totals {
-  totalSales: Decimal;
-  vat: Decimal;
-  net: Decimal;
-  wht: Decimal;
-  wht2: Decimal;
-  due: Decimal;
-}
-
-export interface Totals {
   totalSales: Decimal; // Total Sales (VAT Inclusive)
-  vat: Decimal; // 12% VAT portion of Total Sales
-  net: Decimal; // Total Sales - VAT (Amount Net of VAT)
-  wht1: Decimal; // Withholding Tax 1 deduction amount
-  wht2: Decimal; // Withholding Tax 2 deduction amount
-  whtTotal: Decimal; // Withholding Tax 1 + Withholding Tax 2
-  wht: Decimal; // backward compatibility alias to whtTotal
-  wht1Rate: Decimal; // Rate 1 (e.g. 1)
-  wht2Rate: Decimal; // Rate 2 (e.g. 5)
+  vat: Decimal;        // 12% VAT portion
+  net: Decimal;        // Total Sales - VAT
+  wht1: Decimal;       // Withholding Tax 1 deduction
+  wht2: Decimal;       // Withholding Tax 2 deduction
+  whtTotal: Decimal;   // wht1 + wht2
+  wht: Decimal;        // backward-compat alias for whtTotal
+  wht1Rate: Decimal;
+  wht2Rate: Decimal;
   wht1Enabled: boolean;
   wht2Enabled: boolean;
-  due: Decimal; // TOTAL AMOUNT DUE = Total Sales - whtTotal
+  due: Decimal;        // TOTAL AMOUNT DUE = Total Sales - whtTotal
+}
+
+export interface WhtOptions {
+  wht1Rate?: string;
+  wht2Rate?: string;
+  wht1Enabled?: boolean;
+  wht2Enabled?: boolean;
+  /** Legacy single-WHT fields kept for backward compatibility */
+  whtRate?: string;
+  whtEnabled?: boolean;
+  whtRate2?: string;
+  whtEnabled2?: boolean;
 }
 
 /**
- * Calculates VAT totals and independent multiple withholding taxes.
- * Base for Withholding Taxes is Total Sales (VAT Inclusive), per invoice specification:
- *   Withholding Tax 1 = Total Sales (VAT Inclusive) × Rate 1
- *   Withholding Tax 2 = Total Sales (VAT Inclusive) × Rate 2
- *   Total Withholding Tax = Withholding Tax 1 + Withholding Tax 2
- *   TOTAL AMOUNT DUE = Total Sales (VAT Inclusive) - Total Withholding Tax
+ * Calculates VAT totals and dual independent withholding taxes.
+ * WHT base = Total Sales (VAT Inclusive).
+ *
+ * Accepts either:
+ *   calcTotals(items, opts)                   — new WhtOptions object form
+ *   calcTotals(items, rate1, rate2, en1, en2) — legacy positional form
  */
 export function calcTotals(
   items: Pick<LineItem, "qty" | "unitPrice">[],
-  whtRatePct: string,
+  optsOrRate: WhtOptions | string = {},
   whtRatePct2 = "5",
   enabled = true,
   enabled2 = true,
 ): Totals {
+  let rate1Str: string;
+  let rate2Str: string;
+  let en1: boolean;
+  let en2: boolean;
+
+  if (typeof optsOrRate === "object") {
+    const o = optsOrRate as WhtOptions;
+    rate1Str = o.wht1Rate  ?? o.whtRate  ?? "1";
+    rate2Str = o.wht2Rate  ?? o.whtRate2 ?? "5";
+    en1      = o.wht1Enabled  ?? o.whtEnabled  ?? true;
+    en2      = o.wht2Enabled  ?? o.whtEnabled2 ?? true;
+  } else {
+    rate1Str = optsOrRate ?? "1";
+    rate2Str = whtRatePct2;
+    en1      = enabled;
+    en2      = enabled2;
+  }
+
   const totalSales = items.reduce((s, i) => s.add(calcLine(i).amount), new Decimal(0));
-  const vat = r2(totalSales.mul(12).div(112));
-  const net = totalSales.sub(vat);
-  const rate = toDec(whtRatePct) ?? new Decimal(0);
-  const rate2 = toDec(whtRatePct2) ?? new Decimal(0);
-  const wht = enabled ? r2(totalSales.mul(rate).div(100)) : new Decimal(0);
-  const wht2 = enabled2 ? r2(totalSales.mul(rate2).div(100)) : new Decimal(0);
-  const due = totalSales.sub(wht).sub(wht2);
-  return { totalSales, vat, net, wht, wht2, due };
+  const vat        = r2(totalSales.mul(12).div(112));
+  const net        = totalSales.sub(vat);
+  const rate1      = toDec(rate1Str) ?? new Decimal(0);
+  const rate2      = toDec(rate2Str) ?? new Decimal(0);
+  const wht1       = en1 ? r2(totalSales.mul(rate1).div(100)) : new Decimal(0);
+  const wht2       = en2 ? r2(totalSales.mul(rate2).div(100)) : new Decimal(0);
+  const whtTotal   = wht1.add(wht2);
+  const due        = totalSales.sub(whtTotal);
+
+  return { totalSales, vat, net, wht1, wht2, whtTotal, wht: whtTotal, wht1Rate: rate1, wht2Rate: rate2, wht1Enabled: en1, wht2Enabled: en2, due };
 }
 
 export function peso(d: Decimal | null | undefined): string {

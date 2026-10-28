@@ -14,16 +14,19 @@ describe("VAT calculations", () => {
   });
 
   it("calculates Total Sales and VAT portion correctly", () => {
-    const t = calcTotals(igacos, { wht1Rate: "1", wht1Enabled: true, wht2Enabled: false });
+    const t = calcTotals(igacos, { wht1Rate: "1", wht1Enabled: true, wht2Rate: "5", wht2Enabled: true });
     expect(peso(t.totalSales)).toBe("₱67,515.50");
     expect(peso(t.vat)).toBe("₱7,233.80");
     expect(peso(t.net)).toBe("₱60,281.70");
-    expect(peso(t.wht)).toBe("₱675.16");
+    // wht = whtTotal = wht1 + wht2
+    expect(peso(t.wht)).toBe("₱4,050.94");
     expect(peso(t.wht2)).toBe("₱3,375.78");
     expect(peso(t.due)).toBe("₱63,464.56");
   });
+
   it("withholding rate is editable", () => {
-    expect(peso(calcTotals(igacos, "2").wht)).toBe("₱1,350.31");
+    // wht1 = 67,515.50 × 2% = 1,350.31 (positional: rate1="2", rate2 default "5")
+    expect(peso(calcTotals(igacos, "2").wht1)).toBe("₱1,350.31");
     expect(peso(calcTotals(igacos, "0", "0").due)).toBe("₱67,515.50");
   });
 
@@ -97,24 +100,28 @@ describe("VAT calculations", () => {
     expect(peso(t.wht2)).toBe("₱4,166.53");
     expect(peso(t.due)).toBe("₱78,330.66");
   });
+
   it("disables Tax 1 independently", () => {
     const t = calcTotals(igacos, "1", "5", false, true);
-    expect(peso(t.wht)).toBe("₱0.00");
+    expect(peso(t.wht)).toBe("₱3,375.78"); // wht = whtTotal; wht1=0, wht2=3375.78
     expect(peso(t.wht2)).toBe("₱3,375.78");
     expect(peso(t.due)).toBe("₱64,139.72");
   });
+
   it("disables Tax 2 independently", () => {
     const t = calcTotals(igacos, "1", "5", true, false);
-    expect(peso(t.wht)).toBe("₱675.16");
+    expect(peso(t.wht)).toBe("₱675.16"); // wht = whtTotal = wht1 only
     expect(peso(t.wht2)).toBe("₱0.00");
     expect(peso(t.due)).toBe("₱66,840.34");
   });
+
   it("does not deduct disabled taxes", () => {
     expect(peso(calcTotals(igacos, "1", "5", false, false).due)).toBe("₱67,515.50");
   });
+
   it("edits both rates independently from VAT-inclusive sales", () => {
     const t = calcTotals(igacos, "2", "3");
-    expect(peso(t.wht)).toBe("₱1,350.31");
+    expect(peso(t.wht1)).toBe("₱1,350.31");
     expect(peso(t.wht2)).toBe("₱2,025.47");
     expect(peso(t.due)).toBe("₱64,139.72");
   });

@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+﻿import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { calcLine, calcTotals, peso } from "./calc";
 import type { InvoiceData } from "./types";
@@ -50,7 +50,7 @@ export async function renderInvoicePdf(
   doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
-  // Load only fonts — the template background image is intentionally NOT loaded or embedded.
+  // Load only fonts â€” the template background image is intentionally NOT loaded or embedded.
   const families = new Set<InvoiceFontFamily>(["Liberation Serif"]);
   layout.fields.forEach((field) => families.add(field.fontFamily || "Liberation Serif"));
   const fonts = new Map<InvoiceFontFamily, { regular: PDFFont; bold: PDFFont }>();
@@ -89,20 +89,12 @@ export async function renderInvoicePdf(
     return { x, y, w, h };
   };
 
-  const sanitizeText = (rawStr: string) => {
-    if (!rawStr) return "";
-    // If standard 14 font fallback is active, replace Philippine Peso sign with PHP
-    // because WinAnsiEncoding in standard Type 1 fonts cannot encode Unicode \u20B1
-    if (isStandardFont) {
-      return rawStr.replace(/₱/g, "PHP ");
-    }
-    return rawStr;
-  };
+  const sanitizeText = (rawStr: string) => rawStr || "";
 
   const drawFieldText = (
     p: PDFPage,
     field: LayoutField | undefined,
-    str: string,
+    rawStr: string,
     forceBold = false,
   ) => {
     if (!field || !field.visible || !rawStr) return;
@@ -278,3 +270,4 @@ export async function renderInvoicePdf(
 
   return doc.save();
 }
+

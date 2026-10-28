@@ -1,62 +1,77 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import { renderInvoicePdf } from "./render";
 import { emptyInvoice, type InvoiceData } from "./types";
 import { parseSosTokens, type TextToken } from "./parse";
+import { createDefaultLayout } from "./layout-types";
+
+async function mockFetch(input: RequestInfo | URL): Promise<Response> {
+  const url = String(input);
+  const filename = url.split("/").pop()!;
+  const bytes = await readFile(`public/fonts/${filename}`);
+  return new Response(bytes);
+}
 
 describe("Invoice PDF Rendering & Field Validation", () => {
-  it("renders a Charge Invoice PDF with Times New Roman without error", async () => {
-    const inv: InvoiceData = {
-      ...emptyInvoice("charge"),
-      customer: "Acme Corporation",
-      date: "10/28/2026",
-      terms: "30 Days",
-      wht1Rate: "1",
-      wht1Enabled: true,
-      wht2Rate: "5",
-      wht2Enabled: true,
-      items: [
-        { id: "1", item: "ITM-01", description: "Product A", qty: "2", unitPrice: "1000" },
-      ],
-    };
-
-    const bytes = await renderInvoicePdf(inv);
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBeGreaterThan(1000);
+  it("renders a Charge Invoice PDF without error", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(mockFetch);
+    try {
+      const inv: InvoiceData = {
+        ...emptyInvoice("charge"),
+        customer: "Acme Corporation",
+        date: "10/28/2026",
+        terms: "30 Days",
+        whtRate: "1",
+        whtEnabled: true,
+        whtRate2: "5",
+        whtEnabled2: true,
+        items: [
+          { id: "1", item: "ITM-01", description: "Product A", qty: "2", unitPrice: "1000" },
+        ],
+      };
+      const bytes = await renderInvoicePdf(inv, createDefaultLayout("charge"));
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      expect(bytes.length).toBeGreaterThan(1000);
+    } finally { fetchMock.mockRestore(); }
   });
 
-  it("renders a Cash Invoice PDF with Times New Roman without error", async () => {
-    const inv: InvoiceData = {
-      ...emptyInvoice("cash"),
-      customer: "Retail Trading Store",
-      date: "10/28/2026",
-      wht1Rate: "1",
-      wht1Enabled: true,
-      wht2Rate: "5",
-      wht2Enabled: false,
-      items: [
-        { id: "1", item: "CSH-01", description: "Product B", qty: "5", unitPrice: "250" },
-      ],
-    };
-
-    const bytes = await renderInvoicePdf(inv);
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBeGreaterThan(1000);
+  it("renders a Cash Invoice PDF without error", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(mockFetch);
+    try {
+      const inv: InvoiceData = {
+        ...emptyInvoice("cash"),
+        customer: "Retail Trading Store",
+        date: "10/28/2026",
+        whtRate: "1",
+        whtEnabled: true,
+        whtRate2: "5",
+        whtEnabled2: false,
+        items: [
+          { id: "1", item: "CSH-01", description: "Product B", qty: "5", unitPrice: "250" },
+        ],
+      };
+      const bytes = await renderInvoicePdf(inv, createDefaultLayout("cash"));
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      expect(bytes.length).toBeGreaterThan(1000);
+    } finally { fetchMock.mockRestore(); }
   });
 
   it("handles completely missing business address and PO number gracefully", async () => {
-    const inv: InvoiceData = {
-      ...emptyInvoice("charge"),
-      customer: "Minimal Customer",
-      address: "", // missing
-      poNumber: "", // missing
-      items: [
-        { id: "1", item: "ITM-01", description: "Item without PO", qty: "1", unitPrice: "500" },
-      ],
-    };
-
-    const bytes = await renderInvoicePdf(inv);
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBeGreaterThan(1000);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(mockFetch);
+    try {
+      const inv: InvoiceData = {
+        ...emptyInvoice("charge"),
+        customer: "Minimal Customer",
+        address: "",  // missing
+        poNumber: "", // missing
+        items: [
+          { id: "1", item: "ITM-01", description: "Item without PO", qty: "1", unitPrice: "500" },
+        ],
+      };
+      const bytes = await renderInvoicePdf(inv, createDefaultLayout("charge"));
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      expect(bytes.length).toBeGreaterThan(1000);
+    } finally { fetchMock.mockRestore(); }
   });
 
   it("preserves detected source invoice number but keeps printable invoiceNumber empty", () => {

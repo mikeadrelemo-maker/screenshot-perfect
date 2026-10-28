@@ -1,4 +1,4 @@
-export type InvoiceType = "charge" | "cash";
+﻿export type InvoiceType = "charge" | "cash";
 
 export interface LineItem {
   id: string;
@@ -12,7 +12,6 @@ export interface InvoiceData {
   id: string;
   type: InvoiceType;
   invoiceNumber: string; // target printable invoice number (empty by default)
-  sourceInvoiceNumber?: string; // detected from uploaded source PDF (not automatically printed)
   date: string;
   customer: string;
   tin: string;
@@ -61,3 +60,4 @@ export function emptyInvoice(type: InvoiceType = "charge"): InvoiceData {
     updatedAt: new Date().toISOString(),
   };
 }
+
