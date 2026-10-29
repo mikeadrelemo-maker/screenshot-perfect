@@ -135,12 +135,8 @@ export function InvoiceLayoutEditor({
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(0.9);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
+  const [constrainToPage, setConstrainToPage] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<"canvas" | "pdf">("canvas");
-
-  // Automatic debounced persistence to browser localStorage
-  useEffect(() => {
-    autoSaveLayout(layout);
-  }, [layout]);
 
   // Undo / Redo history stacks
   const [history, setHistory] = useState<InvoiceLayout[]>([createInitialLayout(initialType)]);
@@ -517,6 +513,8 @@ export function InvoiceLayoutEditor({
         onZoomChange={setZoom}
         snapToGrid={snapToGrid}
         onToggleSnap={() => setSnapToGrid((v) => !v)}
+        constrainToPage={constrainToPage}
+        onToggleConstrain={() => setConstrainToPage((v) => !v)}
         onToggleBackground={() =>
           pushState({ ...layout, showBackgroundTemplate: !layout.showBackgroundTemplate })
         }
@@ -554,6 +552,7 @@ export function InvoiceLayoutEditor({
               onUpdateField={handleUpdateField}
               zoom={zoom}
               snapToGrid={snapToGrid}
+              constrainToPage={constrainToPage}
             />
           </main>
 

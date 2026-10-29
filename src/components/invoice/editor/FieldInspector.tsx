@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { InvoiceLayout, LayoutField } from "@/lib/invoice/layout-types";
+import { FONT_FAMILY_OPTIONS, type InvoiceFontFamily } from "@/lib/invoice/fonts";
 import { cn } from "@/lib/utils";
 
 interface FieldInspectorProps {
@@ -188,7 +189,7 @@ export function FieldInspector({
         </div>
       </div>
 
-      {/* Typography */}
+      {/* Typography & Style */}
       <div className="space-y-3 p-4">
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Typography & Style
@@ -201,7 +202,7 @@ export function FieldInspector({
             onValueChange={(value) =>
               onUpdateField({
                 ...field,
-                fontFamily: value === "DejaVu Sans" ? "DejaVu Sans" : "Liberation Serif",
+                fontFamily: value as InvoiceFontFamily,
               })
             }
           >
@@ -209,11 +210,15 @@ export function FieldInspector({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Liberation Serif">Liberation Serif</SelectItem>
-              <SelectItem value="DejaVu Sans">DejaVu Sans</SelectItem>
+              {FONT_FAMILY_OPTIONS.map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.label} ({f.category})
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
+
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-[11px] text-muted-foreground">Font Size (pt)</Label>
@@ -262,6 +267,7 @@ export function FieldInspector({
               size="sm"
               className="h-8 text-xs"
               onClick={() => onUpdateField({ ...field, align: "left" })}
+              title="Align Left"
             >
               <AlignLeft className="h-3.5 w-3.5" />
             </Button>
@@ -271,6 +277,7 @@ export function FieldInspector({
               size="sm"
               className="h-8 text-xs"
               onClick={() => onUpdateField({ ...field, align: "center" })}
+              title="Align Center"
             >
               <AlignCenter className="h-3.5 w-3.5" />
             </Button>
@@ -280,10 +287,34 @@ export function FieldInspector({
               size="sm"
               className="h-8 text-xs"
               onClick={() => onUpdateField({ ...field, align: "right" })}
+              title="Align Right"
             >
               <AlignRight className="h-3.5 w-3.5" />
             </Button>
           </div>
+        </div>
+
+        <div>
+          <Label className="text-[11px] text-muted-foreground">Line Height</Label>
+          <Select
+            value={String(field.lineHeight || 1.15)}
+            onValueChange={(val) =>
+              onUpdateField({
+                ...field,
+                lineHeight: parseFloat(val),
+              })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1.0 (Tight)</SelectItem>
+              <SelectItem value="1.15">1.15 (Default)</SelectItem>
+              <SelectItem value="1.25">1.25 (Relaxed)</SelectItem>
+              <SelectItem value="1.5">1.5 (Loose)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
@@ -301,6 +332,7 @@ export function FieldInspector({
                 { label: "Black", hex: "#000000" },
                 { label: "Red", hex: "#c71f26" },
                 { label: "Navy", hex: "#1e3a8a" },
+                { label: "Grey", hex: "#475569" },
               ].map((swatch) => (
                 <button
                   key={swatch.hex}
@@ -308,12 +340,11 @@ export function FieldInspector({
                   title={swatch.label}
                   onClick={() => onUpdateField({ ...field, color: swatch.hex })}
                   className={cn(
-                    "h-7 flex-1 rounded border text-[10px] font-medium transition-transform",
+                    "h-7 flex-1 rounded border text-[10px] font-medium transition-transform text-white",
                     field.color === swatch.hex && "ring-2 ring-primary ring-offset-1 scale-105",
                   )}
                   style={{
                     backgroundColor: swatch.hex,
-                    color: swatch.hex === "#c71f26" || swatch.hex === "#1e3a8a" ? "#fff" : "#fff",
                   }}
                 >
                   {swatch.label}

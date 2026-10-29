@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { InvoiceLayout, LayoutField } from "@/lib/invoice/layout-types";
 import { cn } from "@/lib/utils";
-import { registerCanvasFonts } from "@/lib/invoice/fonts";
+import { getCssFontFamily, registerCanvasFonts } from "@/lib/invoice/fonts";
 import { toast } from "sonner";
 
 interface LayoutCanvasProps {
@@ -13,6 +13,21 @@ interface LayoutCanvasProps {
   zoom: number; // e.g. 1 = 100%, 0.8 = 80%
   snapToGrid: boolean;
   gridSizeMm?: number;
+  constrainToPage?: boolean;
+}
+
+type ResizeHandleType = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+interface DragState {
+  fieldId: string;
+  type: "move" | "resize";
+  handle?: ResizeHandleType;
+  startX: number;
+  startY: number;
+  origX: number;
+  origY: number;
+  origW: number;
+  origH: number;
 }
 
 export function LayoutCanvas({
@@ -23,8 +38,10 @@ export function LayoutCanvas({
   zoom,
   snapToGrid,
   gridSizeMm = 1.0,
+  constrainToPage = true,
 }: LayoutCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     void registerCanvasFonts().catch((error) => toast.error(error.message));
   }, []);
@@ -37,25 +54,18 @@ export function LayoutCanvas({
   const canvasWidthPx = layout.pageWidthMm * scale;
   const canvasHeightPx = layout.pageHeightMm * scale;
 
-  const [dragState, setDragState] = useState<{
-    fieldId: string;
-    type: "move" | "resize";
-    handle?: "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-    origW: number;
-    origH: number;
-  } | null>(null);
+  const [dragState, setDragState] = useState<DragState | null>(null);
 
   const selectedField = layout.fields.find((f) => f.id === selectedFieldId);
 
   // Snap a coordinate to grid if enabled
-  const snap = (val: number) => {
-    if (!snapToGrid) return Math.round(val * 10) / 10;
-    return Math.round(val / gridSizeMm) * gridSizeMm;
-  };
+  const snap = useCallback(
+    (val: number) => {
+      if (!snapToGrid) return Math.round(val * 10) / 10;
+      return Math.round((Math.round(val / gridSizeMm) * gridSizeMm) * 10) / 10;
+    },
+    [snapToGrid, gridSizeMm],
+  );
 
   // Keyboard navigation for selected field
   useEffect(() => {
@@ -80,22 +90,146 @@ export function LayoutCanvas({
       else return;
 
       e.preventDefault();
+      let nextX = selectedField.x + dx;
+      let nextY = selectedField.y + dy;
+
+      if (constrainToPage) {
+        const maxX = Math.max(0, layout.pageWidthMm - selectedField.w);
+        const maxY = Math.max(0, layout.pageHeightMm - selectedField.h);
+        nextX = Math.max(0, Math.min(maxX, nextX));
+        nextY = Math.max(0, Math.min(maxY, nextY));
+      } else {
+        nextX = Math.max(0, nextX);
+        nextY = Math.max(0, nextY);
+      }
+
       onUpdateField({
         ...selectedField,
-        x: Math.max(0, Math.round((selectedField.x + dx) * 10) / 10),
-        y: Math.max(0, Math.round((selectedField.y + dy) * 10) / 10),
+        x: Math.round(nextX * 10) / 10,
+        y: Math.round(nextY * 10) / 10,
       });
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedField, onUpdateField]);
+  }, [selectedField, onUpdateField, constrainToPage, layout.pageWidthMm, layout.pageHeightMm]);
 
-  // Pointer drag and resize handlers
+  // Pointer drag and resize handlers using window-level listeners for smooth drag
+  useEffect(() => {
+    if (!dragState) return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const targetField = layout.fields.find((f) => f.id === dragState.fieldId);
+      if (!targetField) return;
+
+      const dxMm = (e.clientX - dragState.startX) / scale;
+      const dyMm = (e.clientY - dragState.startY) / scale;
+
+      const MIN_W = 5.0; // mm
+      const MIN_H = 3.0; // mm
+
+      if (dragState.type === "move") {
+        let newX = dragState.origX + dxMm;
+        let newY = dragState.origY + dyMm;
+
+        if (constrainToPage) {
+          const maxX = Math.max(0, layout.pageWidthMm - targetField.w);
+          const maxY = Math.max(0, layout.pageHeightMm - targetField.h);
+          newX = Math.max(0, Math.min(maxX, newX));
+          newY = Math.max(0, Math.min(maxY, newY));
+        } else {
+          newX = Math.max(0, newX);
+          newY = Math.max(0, newY);
+        }
+
+        newX = snap(newX);
+        newY = snap(newY);
+
+        onUpdateField({
+          ...targetField,
+          x: Math.round(newX * 10) / 10,
+          y: Math.round(newY * 10) / 10,
+        });
+      } else if (dragState.type === "resize" && dragState.handle) {
+        let newX = dragState.origX;
+        let newY = dragState.origY;
+        let newW = dragState.origW;
+        let newH = dragState.origH;
+
+        const h = dragState.handle;
+
+        // East / West horizontal resize
+        if (h.includes("e")) {
+          const targetW = dragState.origW + dxMm;
+          const maxAllowedW = constrainToPage ? layout.pageWidthMm - dragState.origX : 1000;
+          newW = snap(Math.max(MIN_W, Math.min(maxAllowedW, targetW)));
+        } else if (h.includes("w")) {
+          const maxDeltaLeft = constrainToPage ? dragState.origX : 1000;
+          const clampedDx = Math.max(-maxDeltaLeft, dxMm);
+          const potentialW = snap(Math.max(MIN_W, dragState.origW - clampedDx));
+          newX = dragState.origX + (dragState.origW - potentialW);
+          newW = potentialW;
+        }
+
+        // North / South vertical resize
+        if (h.includes("s")) {
+          const targetH = dragState.origH + dyMm;
+          const maxAllowedH = constrainToPage ? layout.pageHeightMm - dragState.origY : 1000;
+          newH = snap(Math.max(MIN_H, Math.min(maxAllowedH, targetH)));
+        } else if (h.includes("n")) {
+          const maxDeltaTop = constrainToPage ? dragState.origY : 1000;
+          const clampedDy = Math.max(-maxDeltaTop, dyMm);
+          const potentialH = snap(Math.max(MIN_H, dragState.origH - clampedDy));
+          newY = dragState.origY + (dragState.origH - potentialH);
+          newH = potentialH;
+        }
+
+        if (constrainToPage) {
+          if (newX < 0) {
+            newW += newX;
+            newX = 0;
+          }
+          if (newY < 0) {
+            newH += newY;
+            newY = 0;
+          }
+          if (newX + newW > layout.pageWidthMm) {
+            newW = Math.max(MIN_W, layout.pageWidthMm - newX);
+          }
+          if (newY + newH > layout.pageHeightMm) {
+            newH = Math.max(MIN_H, layout.pageHeightMm - newY);
+          }
+        }
+
+        onUpdateField({
+          ...targetField,
+          x: Math.round(newX * 10) / 10,
+          y: Math.round(newY * 10) / 10,
+          w: Math.round(newW * 10) / 10,
+          h: Math.round(newH * 10) / 10,
+        });
+      }
+    };
+
+    const handlePointerUp = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [dragState, layout, scale, constrainToPage, snap, onUpdateField]);
+
   const onPointerDownField = (e: React.PointerEvent, field: LayoutField) => {
     e.stopPropagation();
+    e.preventDefault();
     onSelectField(field.id);
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     setDragState({
       fieldId: field.id,
@@ -112,10 +246,11 @@ export function LayoutCanvas({
   const onPointerDownHandle = (
     e: React.PointerEvent,
     field: LayoutField,
-    handle: "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w",
+    handle: ResizeHandleType,
   ) => {
     e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+    onSelectField(field.id);
 
     setDragState({
       fieldId: field.id,
@@ -130,68 +265,7 @@ export function LayoutCanvas({
     });
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragState) return;
-    const targetField = layout.fields.find((f) => f.id === dragState.fieldId);
-    if (!targetField) return;
-
-    const dxMm = (e.clientX - dragState.startX) / scale;
-    const dyMm = (e.clientY - dragState.startY) / scale;
-
-    if (dragState.type === "move") {
-      const newX = snap(Math.max(0, dragState.origX + dxMm));
-      const newY = snap(Math.max(0, dragState.origY + dyMm));
-      onUpdateField({
-        ...targetField,
-        x: newX,
-        y: newY,
-      });
-    } else if (dragState.type === "resize" && dragState.handle) {
-      let newX = targetField.x;
-      let newY = targetField.y;
-      let newW = targetField.w;
-      let newH = targetField.h;
-
-      const h = dragState.handle;
-      if (h.includes("e")) {
-        newW = snap(Math.max(5, dragState.origW + dxMm));
-      }
-      if (h.includes("s")) {
-        newH = snap(Math.max(3, dragState.origH + dyMm));
-      }
-      if (h.includes("w")) {
-        const potentialW = snap(Math.max(5, dragState.origW - dxMm));
-        newX = dragState.origX + (dragState.origW - potentialW);
-        newW = potentialW;
-      }
-      if (h.includes("n")) {
-        const potentialH = snap(Math.max(3, dragState.origH - dyMm));
-        newY = dragState.origY + (dragState.origH - potentialH);
-        newH = potentialH;
-      }
-
-      onUpdateField({
-        ...targetField,
-        x: Math.round(newX * 10) / 10,
-        y: Math.round(newY * 10) / 10,
-        w: Math.round(newW * 10) / 10,
-        h: Math.round(newH * 10) / 10,
-      });
-    }
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (dragState) {
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        // pointer capture release fallback
-      }
-      setDragState(null);
-    }
-  };
-
-  // Check if field is out of printable bounds
+  // Check if field extends beyond margins
   const isOutOfBounds = (f: LayoutField) => {
     const maxX = layout.pageWidthMm - layout.marginsMm.right;
     const maxY = layout.pageHeightMm - layout.marginsMm.bottom;
@@ -206,10 +280,8 @@ export function LayoutCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-[700px] flex-1 items-center justify-center overflow-auto bg-slate-900/10 p-8 select-none"
+      className="relative flex min-h-[700px] flex-1 items-center justify-center overflow-auto bg-slate-900/10 p-8 select-none touch-none"
       onClick={() => onSelectField(null)}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
     >
       {/* Paper Canvas (US Letter) */}
       <div
@@ -225,7 +297,7 @@ export function LayoutCanvas({
       >
         {/* Printable Margins Guidelines */}
         <div
-          className="pointer-events-none absolute border border-dashed border-sky-300/60"
+          className="pointer-events-none absolute border border-dashed border-sky-400/60"
           style={{
             top: `${layout.marginsMm.top * scale}px`,
             left: `${layout.marginsMm.left * scale}px`,
@@ -255,12 +327,13 @@ export function LayoutCanvas({
           />
         )}
 
-        {/* Interactive Draggable Fields */}
+        {/* Interactive Draggable & Resizable Fields */}
         {layout.fields
           .filter((f) => f.visible)
           .sort((a, b) => a.zIndex - b.zIndex)
           .map((field) => {
             const isSelected = field.id === selectedFieldId;
+            const isDragging = dragState?.fieldId === field.id;
             const outOfBounds = isOutOfBounds(field);
 
             const leftPx = field.x * scale;
@@ -273,11 +346,12 @@ export function LayoutCanvas({
                 key={field.id}
                 onPointerDown={(e) => onPointerDownField(e, field)}
                 className={cn(
-                  "group absolute cursor-move transition-shadow",
+                  "group absolute cursor-move transition-shadow box-border",
                   isSelected
                     ? "ring-2 ring-primary ring-offset-1 z-50 bg-primary/10 shadow-lg"
                     : "hover:ring-1 hover:ring-primary/60 hover:bg-primary/5",
                   outOfBounds && "ring-amber-500 bg-amber-500/10",
+                  isDragging && "opacity-95 shadow-2xl",
                 )}
                 style={{
                   left: `${leftPx}px`,
@@ -287,90 +361,100 @@ export function LayoutCanvas({
                   zIndex: isSelected ? 999 : field.zIndex,
                 }}
               >
-                {/* Visual Label Tag above field */}
+                {/* Visual Label Tag with X, Y and W, H above field */}
                 <div
                   className={cn(
-                    "pointer-events-none absolute -top-5 left-0 whitespace-nowrap rounded px-1 text-[10px] font-medium leading-tight shadow-sm transition-opacity",
+                    "pointer-events-none absolute -top-5 left-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-none shadow transition-opacity z-[1000]",
                     isSelected
                       ? "bg-primary text-primary-foreground opacity-100"
                       : "bg-slate-800/80 text-white opacity-0 group-hover:opacity-100",
                   )}
                 >
-                  {field.name} ({field.x.toFixed(1)}, {field.y.toFixed(1)} mm)
+                  {field.name} · X:{field.x.toFixed(1)}, Y:{field.y.toFixed(1)} mm · W:{field.w.toFixed(1)}, H:{field.h.toFixed(1)} mm
+                  {isDragging && (dragState?.type === "move" ? " (Moving)" : " (Resizing)")}
                 </div>
 
                 {/* Out of bounds badge */}
-                {outOfBounds && (
+                {outOfBounds && !isSelected && (
                   <div
-                    className="pointer-events-none absolute -top-5 right-0 flex items-center gap-0.5 rounded bg-amber-600 px-1 text-[10px] text-white"
+                    className="pointer-events-none absolute -top-5 right-0 flex items-center gap-0.5 rounded bg-amber-600 px-1 py-0.5 text-[10px] text-white z-[1000]"
                     title="Field extends beyond printable area!"
                   >
                     <AlertTriangle className="h-3 w-3" /> Margin warning
                   </div>
                 )}
 
-                {/* Simulated Content in Field */}
+                {/* Simulated Content in Field matching PDF typography */}
                 <div
                   className={cn(
-                    "flex h-full w-full overflow-hidden p-0.5 leading-snug",
+                    "flex h-full w-full overflow-hidden p-0.5 items-center",
                     field.align === "right" && "justify-end text-right",
                     field.align === "center" && "justify-center text-center",
                     field.align === "left" && "justify-start text-left",
                     field.fontWeight === "bold" ? "font-bold" : "font-normal",
                   )}
                   style={{
-                    fontFamily: field.fontFamily || "Liberation Serif",
+                    fontFamily: getCssFontFamily(field.fontFamily),
                     fontSize: `${field.fontSize * (96 / 72) * zoom}px`,
+                    lineHeight: field.lineHeight || 1.15,
                     color: field.color || "#0d1329",
                   }}
                 >
-                  <span className={cn(field.wrapText ? "break-words" : "truncate")}>
+                  <span className={cn(field.wrapText ? "break-words w-full" : "whitespace-nowrap truncate")}>
                     {field.staticText || field.sampleValue || field.name}
                   </span>
                 </div>
 
-                {/* 8 Resize Handles when selected */}
+                {/* 8 Resize Handles when selected (North, South, East, West and Corners) */}
                 {isSelected && (
                   <>
-                    {/* NW */}
+                    {/* NW Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "nw")}
-                      className="absolute -top-1.5 -left-1.5 h-3 w-3 cursor-nw-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -top-1.5 -left-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize North-West"
                     />
-                    {/* N */}
+                    {/* N Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "n")}
-                      className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3 w-3 cursor-n-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3.5 w-3.5 cursor-ns-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize Height (Top)"
                     />
-                    {/* NE */}
+                    {/* NE Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "ne")}
-                      className="absolute -top-1.5 -right-1.5 h-3 w-3 cursor-ne-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -top-1.5 -right-1.5 h-3.5 w-3.5 cursor-nesw-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize North-East"
                     />
-                    {/* W */}
+                    {/* W Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "w")}
-                      className="absolute top-1/2 -translate-y-1/2 -left-1.5 h-3 w-3 cursor-w-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute top-1/2 -translate-y-1/2 -left-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize Width (Left)"
                     />
-                    {/* E */}
+                    {/* E Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "e")}
-                      className="absolute top-1/2 -translate-y-1/2 -right-1.5 h-3 w-3 cursor-e-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute top-1/2 -translate-y-1/2 -right-1.5 h-3.5 w-3.5 cursor-ew-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize Width (Right)"
                     />
-                    {/* SW */}
+                    {/* SW Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "sw")}
-                      className="absolute -bottom-1.5 -left-1.5 h-3 w-3 cursor-sw-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -bottom-1.5 -left-1.5 h-3.5 w-3.5 cursor-nesw-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize South-West"
                     />
-                    {/* S */}
+                    {/* S Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "s")}
-                      className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 h-3 w-3 cursor-s-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 h-3.5 w-3.5 cursor-ns-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize Height (Bottom)"
                     />
-                    {/* SE */}
+                    {/* SE Handle */}
                     <div
                       onPointerDown={(e) => onPointerDownHandle(e, field, "se")}
-                      className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-se-resize rounded-full border border-white bg-primary shadow"
+                      className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border-2 border-white bg-primary shadow hover:scale-125 transition-transform"
+                      title="Resize South-East"
                     />
                   </>
                 )}

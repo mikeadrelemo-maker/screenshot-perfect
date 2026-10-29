@@ -52,7 +52,7 @@ function ConvertPage() {
   const [error, setError] = useState<string | null>(null);
   const [dup, setDup] = useState<InvoiceData | undefined>();
   const [activeLayout, setActiveLayout] = useState<InvoiceLayout>(() =>
-    createDefaultLayout("charge"),
+    loadActiveLayout("charge"),
   );
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>(() => evaluateCurrentLicense());
   const [licenseDialogOpen, setLicenseDialogOpen] = useState(false);
@@ -87,7 +87,19 @@ function ConvertPage() {
   useEffect(() => setDup(findDuplicate(inv)), [inv.invoiceNumber, inv.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    setActiveLayout(loadActiveLayout(inv.type));
+    const refresh = () => setActiveLayout(loadActiveLayout(inv.type));
+    refresh();
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("visibilitychange", refresh);
+    window.addEventListener("storage", refresh);
+    window.addEventListener("sos-layout-changed", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("sos-layout-changed", refresh);
+    };
   }, [inv.type]);
 
   const onFile = async (file: File) => {

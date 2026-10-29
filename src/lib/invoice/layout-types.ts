@@ -63,6 +63,7 @@ export interface LayoutField {
   align: "left" | "center" | "right";
   color: string; // hex
   wrapText?: boolean;
+  lineHeight?: number;
   visible: boolean;
   zIndex: number;
   // For custom text/labels

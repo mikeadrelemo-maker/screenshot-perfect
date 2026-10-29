@@ -6,12 +6,25 @@ import {
   type LayoutField,
 } from "./layout-types";
 import type { InvoiceType } from "./types";
+import type { InvoiceFontFamily } from "./fonts";
 
 export const KEY_CHARGE_V1 = "sos_invoice_layout_charge_v1";
 export const KEY_CASH_V1 = "sos_invoice_layout_cash_v1";
 export const KEY_CHARGE_LEGACY = "sos_invoice_layout_charge";
 export const KEY_CASH_LEGACY = "sos_invoice_layout_cash";
 export const KEY_PRESETS = "sos_invoice_layout_presets";
+
+const VALID_FONT_FAMILIES = new Set<string>([
+  "Arial",
+  "Helvetica",
+  "Times New Roman",
+  "Georgia",
+  "Verdana",
+  "Tahoma",
+  "Courier New",
+  "Liberation Serif",
+  "DejaVu Sans",
+]);
 
 export function storageKeyForType(type: InvoiceType): string {
   return type === "charge" ? KEY_CHARGE_V1 : KEY_CASH_V1;
@@ -52,16 +65,17 @@ export function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceTyp
           w,
           h,
           fontFamily:
-            f.fontFamily === "DejaVu Sans" || f.fontFamily === "Times New Roman" || f.fontFamily === "Liberation Serif"
-              ? f.fontFamily
+            typeof f.fontFamily === "string" && VALID_FONT_FAMILIES.has(f.fontFamily)
+              ? (f.fontFamily as InvoiceFontFamily)
               : (base?.fontFamily ?? "Liberation Serif"),
           fontSize: finite(f.fontSize, 8, 4, 72),
           fontWeight: f.fontWeight === "bold" ? "bold" : "normal",
-          align: f.align === "center" || f.align === "right" ? f.align : "left",
+          align: f.align === "center" || f.align === "right" ? f.align : (base?.align ?? "left"),
           color:
-            typeof f.color === "string" && /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : "#0d1329",
+            typeof f.color === "string" && /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : (base?.color ?? "#0d1329"),
           visible: f.visible !== false,
           wrapText: f.wrapText === true,
+          lineHeight: finite(f.lineHeight, base?.lineHeight ?? 1.15, 0.8, 3.0),
           staticText: typeof f.staticText === "string" ? f.staticText : undefined,
           sampleValue: typeof f.sampleValue === "string" ? f.sampleValue : base?.sampleValue,
           zIndex: finite(f.zIndex, 1, 0, 10000),
@@ -146,6 +160,8 @@ export function saveActiveLayout(layout: InvoiceLayout): void {
     localStorage.setItem(storageKeyForType(layout.invoiceType), serialized);
     // Also mirror to legacy key for backwards compatibility
     localStorage.setItem(legacyStorageKeyForType(layout.invoiceType), serialized);
+    // Dispatch real-time synchronization event for Print Preview and editor tabs
+    window.dispatchEvent(new CustomEvent("sos-layout-changed", { detail: updated }));
   } catch {
     throw new Error(
       "Layout could not be saved in this browser. Storage may be full or disabled; export the layout to keep a copy.",

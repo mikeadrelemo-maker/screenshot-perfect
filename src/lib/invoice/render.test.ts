@@ -137,4 +137,54 @@ describe("Invoice PDF Rendering & Field Validation", () => {
     // Crucial requirement: printable invoiceNumber must NOT be automatically populated
     expect(result.invoice.invoiceNumber).toBe("");
   });
+
+  it("renders with custom typography, font families, and repositioned fields", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(mockFetch);
+    const drawSpy = vi.spyOn(PDFPage.prototype, "drawText");
+    try {
+      const inv: InvoiceData = {
+        ...emptyInvoice("charge"),
+        customer: "Custom Typography Test Inc",
+        date: "10/29/2026",
+        items: [{ id: "1", item: "A", description: "B", qty: "1", unitPrice: "100" }],
+      };
+      const layout = createDefaultLayout("charge");
+      // Change font family and position of Customer Name
+      layout.fields = layout.fields.map((f) => {
+        if (f.type === "customer") {
+          return {
+            ...f,
+            x: 50.0,
+            y: 45.0,
+            w: 90.0,
+            h: 8.0,
+            fontFamily: "Arial",
+            fontSize: 12,
+            fontWeight: "bold",
+            align: "center",
+          };
+        }
+        if (f.type === "colDesc") {
+          return { ...f, w: 120.0, fontFamily: "Times New Roman" };
+        }
+        if (f.type === "colAmount") {
+          return { ...f, w: 30.0, fontFamily: "Courier New" };
+        }
+        return f;
+      });
+
+      const bytes = await renderInvoicePdf(inv, layout);
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      expect(bytes.length).toBeGreaterThan(1000);
+
+      // Verify that drawText was called with the Customer text
+      const customerCall = drawSpy.mock.calls.find((call) =>
+        String(call[0]).includes("Custom Typography Test Inc"),
+      );
+      expect(customerCall).toBeDefined();
+    } finally {
+      drawSpy.mockRestore();
+      fetchMock.mockRestore();
+    }
+  });
 });

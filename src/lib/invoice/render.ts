@@ -1,4 +1,4 @@
-﻿import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { calcLine, calcTotals, peso } from "./calc";
 import type { InvoiceData } from "./types";
@@ -11,10 +11,6 @@ import {
 } from "./layout-types";
 import { loadActiveLayout } from "./layout-store";
 import { loadInvoiceFont, type InvoiceFontFamily } from "./fonts";
-
-// Vite asset imports resolve to exact hashed asset URLs across dev and production builds
-import timesRomanUrl from "@/assets/fonts/TimesNewRoman.ttf?url";
-import timesRomanBoldUrl from "@/assets/fonts/TimesNewRoman-Bold.ttf?url";
 
 export const ROWS_PER_PAGE = 10;
 
@@ -32,8 +28,68 @@ function parseColor(hex: string | undefined, fallback = INK) {
   return fallback;
 }
 
+async function getPdfFontPair(
+  doc: PDFDocument,
+  family: InvoiceFontFamily,
+): Promise<{ regular: PDFFont; bold: PDFFont }> {
+  switch (family) {
+    case "Courier New":
+      return {
+        regular: await doc.embedFont(StandardFonts.Courier),
+        bold: await doc.embedFont(StandardFonts.CourierBold),
+      };
+    case "Arial":
+    case "Helvetica":
+    case "Verdana":
+    case "Tahoma":
+      return {
+        regular: await doc.embedFont(StandardFonts.Helvetica),
+        bold: await doc.embedFont(StandardFonts.HelveticaBold),
+      };
+    case "Times New Roman":
+    case "Georgia":
+      return {
+        regular: await doc.embedFont(StandardFonts.TimesRoman),
+        bold: await doc.embedFont(StandardFonts.TimesRomanBold),
+      };
+    case "DejaVu Sans":
+      try {
+        const [reg, bold] = await Promise.all([
+          loadInvoiceFont("DejaVu Sans"),
+          loadInvoiceFont("DejaVu Sans", true),
+        ]);
+        return {
+          regular: await doc.embedFont(reg, { subset: true }),
+          bold: await doc.embedFont(bold, { subset: true }),
+        };
+      } catch {
+        return {
+          regular: await doc.embedFont(StandardFonts.Helvetica),
+          bold: await doc.embedFont(StandardFonts.HelveticaBold),
+        };
+      }
+    case "Liberation Serif":
+    default:
+      try {
+        const [reg, bold] = await Promise.all([
+          loadInvoiceFont("Liberation Serif"),
+          loadInvoiceFont("Liberation Serif", true),
+        ]);
+        return {
+          regular: await doc.embedFont(reg, { subset: true }),
+          bold: await doc.embedFont(bold, { subset: true }),
+        };
+      } catch {
+        return {
+          regular: await doc.embedFont(StandardFonts.TimesRoman),
+          bold: await doc.embedFont(StandardFonts.TimesRomanBold),
+        };
+      }
+  }
+}
+
 /**
- * Render a clean, text-only invoice PDF using Times New Roman typography on Letter-size paper.
+ * Render a clean, text-only invoice PDF using configured layout and typography on Letter-size paper.
  * - Template background artwork is intentionally NOT rendered in the PDF.
  * - Supports independent multiple withholding taxes (WHT 1 and WHT 2).
  * - Optional fields (Business Address, Reference/PO No.) render only when supplied.
@@ -50,20 +106,16 @@ export async function renderInvoicePdf(
   doc.setTitle(`${inv.type === "charge" ? "Charge" : "Cash"} Invoice ${inv.invoiceNumber || ""}`);
   doc.setCreator("SOS Invoice Template Converter by Adrian Llano");
 
-  // Load only fonts â€” the template background image is intentionally NOT loaded or embedded.
+  // Load only required font families
   const families = new Set<InvoiceFontFamily>(["Liberation Serif"]);
-  layout.fields.forEach((field) => families.add(field.fontFamily || "Liberation Serif"));
+  layout.fields.forEach((field) => {
+    if (field.fontFamily) families.add(field.fontFamily);
+  });
+
   const fonts = new Map<InvoiceFontFamily, { regular: PDFFont; bold: PDFFont }>();
   await Promise.all(
     [...families].map(async (family) => {
-      const [reg, bold] = await Promise.all([
-        loadInvoiceFont(family),
-        loadInvoiceFont(family, true),
-      ]);
-      fonts.set(family, {
-        regular: await doc.embedFont(reg, { subset: true }),
-        bold: await doc.embedFont(bold, { subset: true }),
-      });
+      fonts.set(family, await getPdfFontPair(doc, family));
     }),
   );
 
@@ -80,16 +132,36 @@ export async function renderInvoicePdf(
     return fieldsMap.get(type);
   };
 
-  /** Convert top-left millimeter coordinates to PDF bottom-left points */
+  /** Convert top-left millimeter coordinates to PDF bottom-left points, ensuring bounds are safe */
   const toPdfBox = (field: LayoutField) => {
-    const x = mmToPt(field.x);
-    const y = pageH - mmToPt(field.y) - mmToPt(field.h);
-    const w = mmToPt(field.w);
-    const h = mmToPt(field.h);
+    const rawX = mmToPt(field.x);
+    const rawY = mmToPt(field.y);
+    const rawW = mmToPt(field.w);
+    const rawH = mmToPt(field.h);
+
+    const x = Math.max(0, Math.min(rawX, Math.max(0, pageW - 2)));
+    const w = Math.max(2, Math.min(rawW, Math.max(2, pageW - x)));
+    const h = Math.max(2, Math.min(rawH, pageH));
+    const y = Math.max(0, Math.min(pageH - rawY - h, pageH - h));
     return { x, y, w, h };
   };
 
-  const sanitizeText = (rawStr: string) => rawStr || "";
+  const sanitizeTextForFont = (rawStr: string, font: PDFFont): string => {
+    if (!rawStr) return "";
+    let text = rawStr;
+    try {
+      font.encodeText(text);
+      return text;
+    } catch {
+      text = text.replace(/\u20B1/g, "PHP ");
+      try {
+        font.encodeText(text);
+        return text;
+      } catch {
+        return text.replace(/[^\x20-\x7E\xA0-\xFF]/g, "");
+      }
+    }
+  };
 
   const drawFieldText = (
     p: PDFPage,
@@ -98,21 +170,17 @@ export async function renderInvoicePdf(
     forceBold = false,
   ) => {
     if (!field || !field.visible || !rawStr) return;
-    const str = sanitizeText(rawStr);
-    if (!str.trim()) return;
 
     const { x, y, w, h } = toPdfBox(field);
-    const familyFonts = fonts.get(field.fontFamily || "Liberation Serif");
+    const familyFonts = fonts.get(field.fontFamily || "Liberation Serif") || fonts.get("Liberation Serif");
     if (!familyFonts) throw new Error("Invoice font was not registered.");
     const f = forceBold || field.fontWeight === "bold" ? familyFonts.bold : familyFonts.regular;
+    const str = sanitizeTextForFont(rawStr, f);
+    if (!str.trim()) return;
     const color = parseColor(field.color, INK);
     const sz = field.fontSize || 8;
+    const lineSpacingMultiplier = field.lineHeight || 1.15;
 
-    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > pageW + 0.01 || y + h > pageH + 0.01) {
-      throw new Error(
-        `Field "${field.name}" is outside the Letter page. Adjust its position or size.`,
-      );
-    }
     // Fit both dimensions; split long words as well as ordinary paragraphs.
     const linesAt = (size: number): string[] => {
       if (!field.wrapText) return [str.replace(/\s*\n\s*/g, " ")];
@@ -139,24 +207,32 @@ export async function renderInvoicePdf(
       }
       return lines;
     };
+
     let size = sz;
     let lines = linesAt(size);
     while (
       size > 4 &&
-      (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * 1.15 > h)
+      (lines.some((line) => f.widthOfTextAtSize(line, size) > w) || lines.length * size * lineSpacingMultiplier > h)
     ) {
       size = Math.max(4, size - 0.25);
       lines = linesAt(size);
     }
-    if (
-      lines.some((line) => f.widthOfTextAtSize(line, size) > w) ||
-      lines.length * size * 1.15 > h
-    ) {
-      throw new Error(
-        `Text does not fit "${field.name}". Increase the field size or enable wrapping.`,
-      );
+
+    const lineHeight = size * lineSpacingMultiplier;
+    // Constrain lines to available vertical height if still exceeding
+    const maxVisibleLines = Math.max(1, Math.floor(h / lineHeight));
+    if (lines.length > maxVisibleLines) {
+      lines = lines.slice(0, maxVisibleLines);
     }
-    const lineHeight = size * 1.15;
+    // Truncate any line that still slightly exceeds width at min size
+    lines = lines.map((line) => {
+      let l = line;
+      while (l.length > 1 && f.widthOfTextAtSize(l, size) > w) {
+        l = l.slice(0, -1);
+      }
+      return l;
+    });
+
     let baseline = y + (h + lines.length * lineHeight) / 2 - size;
     for (const line of lines) {
       const width = f.widthOfTextAtSize(line, size);
@@ -287,4 +363,3 @@ export async function renderInvoicePdf(
 
   return doc.save();
 }
-

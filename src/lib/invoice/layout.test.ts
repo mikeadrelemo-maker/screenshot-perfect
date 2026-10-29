@@ -14,7 +14,7 @@ import {
   loadPresets,
 } from "./layout-store";
 import { calcTotals, peso } from "./calc";
-import type { LineItem, InvoiceData } from "./types";
+import { emptyInvoice, type LineItem, type InvoiceData } from "./types";
 
 describe("Invoice Layout System & Print Specifications", () => {
   beforeEach(() => {
@@ -220,5 +220,117 @@ describe("Invoice Layout System & Print Specifications", () => {
 
     // Verify calculation rules: 10 * 112 + 5 * 224 = 2240
     expect(peso(totalsAfter.totalSales)).toBe("₱2,240.00");
+  });
+
+  describe("Section 6 Layout Designer Verification Requirements", () => {
+    it("1. moves Customer Name and persists new X, Y coordinates", () => {
+      const charge = loadActiveLayout("charge");
+      const cust = charge.fields.find((f) => f.type === "customer")!;
+      const moved = {
+        ...charge,
+        fields: charge.fields.map((f) => (f.id === cust.id ? { ...f, x: 52.5, y: 48.0 } : f)),
+      };
+      saveActiveLayout(moved);
+
+      const reloaded = loadActiveLayout("charge");
+      const reloadedCust = reloaded.fields.find((f) => f.type === "customer")!;
+      expect(reloadedCust.x).toBe(52.5);
+      expect(reloadedCust.y).toBe(48.0);
+    });
+
+    it("2. resizes DESCRIPTION and AMOUNT fields and confirms saved dimensions match", () => {
+      const charge = loadActiveLayout("charge");
+      const updated = {
+        ...charge,
+        fields: charge.fields.map((f) => {
+          if (f.type === "colDesc") return { ...f, w: 115.5, h: 70.0 };
+          if (f.type === "colAmount") return { ...f, w: 28.0, h: 70.0 };
+          return f;
+        }),
+      };
+      saveActiveLayout(updated);
+
+      const reloaded = loadActiveLayout("charge");
+      const desc = reloaded.fields.find((f) => f.type === "colDesc")!;
+      const amt = reloaded.fields.find((f) => f.type === "colAmount")!;
+      expect(desc.w).toBe(115.5);
+      expect(desc.h).toBe(70.0);
+      expect(amt.w).toBe(28.0);
+      expect(amt.h).toBe(70.0);
+    });
+
+    it("3. changes the font family of one field and verifies that only that field changes", () => {
+      const charge = loadActiveLayout("charge");
+      const custBefore = charge.fields.find((f) => f.type === "customer")!;
+      const dueBefore = charge.fields.find((f) => f.type === "due")!;
+
+      const updated = {
+        ...charge,
+        fields: charge.fields.map((f) =>
+          f.type === "customer" ? { ...f, fontFamily: "Times New Roman" as const } : f,
+        ),
+      };
+      saveActiveLayout(updated);
+
+      const reloaded = loadActiveLayout("charge");
+      const custAfter = reloaded.fields.find((f) => f.type === "customer")!;
+      const dueAfter = reloaded.fields.find((f) => f.type === "due")!;
+
+      expect(custAfter.fontFamily).toBe("Times New Roman");
+      expect(dueAfter.fontFamily).toBe(dueBefore.fontFamily);
+    });
+
+    it("4. changes font size, weight, alignment, and line height and confirms properties match", () => {
+      const cash = loadActiveLayout("cash");
+      const updated = {
+        ...cash,
+        fields: cash.fields.map((f) =>
+          f.type === "totalSales"
+            ? {
+                ...f,
+                fontFamily: "Arial" as const,
+                fontSize: 11,
+                fontWeight: "bold" as const,
+                align: "center" as const,
+                lineHeight: 1.25,
+              }
+            : f,
+        ),
+      };
+      saveActiveLayout(updated);
+
+      const reloaded = loadActiveLayout("cash");
+      const ts = reloaded.fields.find((f) => f.type === "totalSales")!;
+      expect(ts.fontFamily).toBe("Arial");
+      expect(ts.fontSize).toBe(11);
+      expect(ts.fontWeight).toBe("bold");
+      expect(ts.align).toBe("center");
+      expect(ts.lineHeight).toBe(1.25);
+    });
+
+    it("5 & 6. keeps Charge and Cash layouts separate and unchanged when opening another invoice", () => {
+      // Customize Charge
+      const chg = loadActiveLayout("charge");
+      saveActiveLayout({
+        ...chg,
+        fields: chg.fields.map((f) => (f.type === "date" ? { ...f, x: 155.0 } : f)),
+      });
+
+      // Customize Cash
+      const csh = loadActiveLayout("cash");
+      saveActiveLayout({
+        ...csh,
+        fields: csh.fields.map((f) => (f.type === "date" ? { ...f, x: 140.0 } : f)),
+      });
+
+      // Simulate opening different invoices
+      const invA = { ...emptyInvoice("charge"), invoiceNumber: "INV-001" };
+      const invB = { ...emptyInvoice("charge"), invoiceNumber: "INV-002" };
+      const invC = { ...emptyInvoice("cash"), invoiceNumber: "CSH-001" };
+
+      expect(loadActiveLayout(invA.type).fields.find((f) => f.type === "date")?.x).toBe(155.0);
+      expect(loadActiveLayout(invB.type).fields.find((f) => f.type === "date")?.x).toBe(155.0);
+      expect(loadActiveLayout(invC.type).fields.find((f) => f.type === "date")?.x).toBe(140.0);
+    });
   });
 });

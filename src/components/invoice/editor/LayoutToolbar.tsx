@@ -12,6 +12,7 @@ import {
   Eye,
   FileText,
   Sliders,
+  Maximize,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { InvoiceLayout } from "@/lib/invoice/layout-types";
@@ -34,6 +35,8 @@ interface LayoutToolbarProps {
   onZoomChange: (newZoom: number) => void;
   snapToGrid: boolean;
   onToggleSnap: () => void;
+  constrainToPage?: boolean;
+  onToggleConstrain?: () => void;
   onToggleBackground: () => void;
   onOpacityChange: (opacity: number) => void;
   onExportJson: () => void;
@@ -58,6 +61,8 @@ export function LayoutToolbar({
   onZoomChange,
   snapToGrid,
   onToggleSnap,
+  constrainToPage = true,
+  onToggleConstrain,
   onToggleBackground,
   onOpacityChange,
   onExportJson,
@@ -130,7 +135,7 @@ export function LayoutToolbar({
         </Button>
       </div>
 
-      {/* Middle: Canvas tools (Undo, Redo, Zoom, Grid, Template) */}
+      {/* Middle: Canvas tools (Undo, Redo, Zoom, Grid, Constrain, Template) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <Button
           variant="outline"
@@ -165,6 +170,19 @@ export function LayoutToolbar({
         >
           <Grid className="h-3.5 w-3.5" />
         </Button>
+
+        {/* Page Boundary Constrain */}
+        {onToggleConstrain && (
+          <Button
+            variant={constrainToPage ? "default" : "outline"}
+            size="icon"
+            className="h-7 w-7"
+            onClick={onToggleConstrain}
+            title={constrainToPage ? "Constrain Fields to Printable Page: ON" : "Constrain Fields to Printable Page: OFF"}
+          >
+            <Maximize className="h-3.5 w-3.5" />
+          </Button>
+        )}
 
         {/* Template Background Toggle & Opacity */}
         <div className="flex items-center gap-1.5 rounded-md border px-2 py-0.5 bg-muted/20">
@@ -251,7 +269,7 @@ export function LayoutToolbar({
           onClick={onRestoreDefault}
           title="Restore factory default coordinates and layout"
         >
-          Reset to Default Layout
+          Reset to Default
         </Button>
 
         <Button
