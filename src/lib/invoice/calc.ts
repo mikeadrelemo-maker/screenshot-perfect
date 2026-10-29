@@ -1,4 +1,4 @@
-﻿import Decimal from "decimal.js";
+import Decimal from "decimal.js";
 import type { LineItem } from "./types";
 
 Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
@@ -57,7 +57,12 @@ export interface WhtOptions {
 
 /**
  * Calculates VAT totals and dual independent withholding taxes.
- * WHT base = Total Sales (VAT Inclusive).
+ * WHT base = Amount Net of VAT.
+ *
+ * Formulas:
+ *   Withholding Tax 1 = Amount Net of VAT × (Tax 1 Percentage / 100)
+ *   Withholding Tax 2 = Amount Net of VAT × (Tax 2 Percentage / 100)
+ *   TOTAL AMOUNT DUE  = Total Sales (VAT Inclusive) - Withholding Tax 1 - Withholding Tax 2
  *
  * Accepts either:
  *   calcTotals(items, opts)                   — new WhtOptions object form
@@ -91,10 +96,10 @@ export function calcTotals(
   const totalSales = items.reduce((s, i) => s.add(calcLine(i).amount), new Decimal(0));
   const vat        = r2(totalSales.mul(12).div(112));
   const net        = totalSales.sub(vat);
-  const rate1      = toDec(rate1Str) ?? new Decimal(0);
-  const rate2      = toDec(rate2Str) ?? new Decimal(0);
-  const wht1       = en1 ? r2(totalSales.mul(rate1).div(100)) : new Decimal(0);
-  const wht2       = en2 ? r2(totalSales.mul(rate2).div(100)) : new Decimal(0);
+  const rate1      = Decimal.max(0, toDec(rate1Str) ?? new Decimal(0));
+  const rate2      = Decimal.max(0, toDec(rate2Str) ?? new Decimal(0));
+  const wht1       = en1 ? r2(net.mul(rate1).div(100)) : new Decimal(0);
+  const wht2       = en2 ? r2(net.mul(rate2).div(100)) : new Decimal(0);
   const whtTotal   = wht1.add(wht2);
   const due        = totalSales.sub(whtTotal);
 

@@ -259,7 +259,7 @@ export async function renderInvoicePdf(
         const rate1Str = `${rate1}%`;
         drawFieldText(p, getField("whtRate") || getField("wht1Rate"), rate1Str);
         if (totals.wht1.gt(0)) {
-          drawFieldText(p, getField("wht1") || getField("wht"), `(${peso(totals.wht1)})`);
+          drawFieldText(p, getField("wht1") || getField("wht"), `-${peso(totals.wht1)}`);
         }
       }
 
@@ -269,7 +269,7 @@ export async function renderInvoicePdf(
         const rate2Str = `${rate2}%`;
         drawFieldText(p, getField("whtRate2") || getField("wht2Rate"), rate2Str);
         if (totals.wht2.gt(0)) {
-          drawFieldText(p, getField("wht2"), `(${peso(totals.wht2)})`);
+          drawFieldText(p, getField("wht2"), `-${peso(totals.wht2)}`);
         }
       }
       drawFieldText(p, getField("due"), peso(totals.due), true);

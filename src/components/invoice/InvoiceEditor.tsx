@@ -257,8 +257,8 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             VAT-inclusive unit price × quantity.
           </p>
           <p>
-            Withholding taxes are calculated independently using Total Sales (VAT Inclusive) as base:
-            WHT 1 = Total Sales × Rate 1, WHT 2 = Total Sales × Rate 2.
+            Withholding taxes are calculated independently using Amount Net of VAT as base:
+            WHT 1 = Amount Net of VAT × Rate 1, WHT 2 = Amount Net of VAT × Rate 2.
           </p>
           {srcDiff && srcDiff.gt(0.009) && (
             <p className="flex items-start gap-1.5 rounded-md bg-warning-soft p-2 text-warning-foreground">
@@ -302,7 +302,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
                   </div>
                 </div>
                 <span className="num text-destructive">
-                  ({peso(tax === 1 ? totals.wht1 : totals.wht2)})
+                  {(tax === 1 ? totals.wht1 : totals.wht2).gt(0) ? `-${peso(tax === 1 ? totals.wht1 : totals.wht2)}` : peso(tax === 1 ? totals.wht1 : totals.wht2)}
                 </span>
               </div>
             );

@@ -94,8 +94,8 @@ describe("Invoice PDF Rendering & Field Validation", () => {
       expect(drawnTexts.some((t) => t.includes("Tax 1 (1%)"))).toBe(false);
       expect(drawnTexts.some((t) => t.includes("Tax 2 (2%)"))).toBe(false);
 
-      // Amount fields should contain formatted amounts
-      expect(drawnTexts.some((t) => t.startsWith("(") && t.endsWith(")"))).toBe(true);
+      // Amount fields should contain formatted amounts (WHT shown as negative -₱X.XX)
+      expect(drawnTexts.some((t) => t.startsWith("-₱"))).toBe(true);
     } finally {
       drawSpy.mockRestore();
       fetchMock.mockRestore();
