@@ -385,25 +385,70 @@ export function LayoutCanvas({
                 )}
 
                 {/* Simulated Content in Field matching PDF typography */}
-                <div
-                  className={cn(
-                    "flex h-full w-full overflow-hidden p-0.5 items-center",
-                    field.align === "right" && "justify-end text-right",
-                    field.align === "center" && "justify-center text-center",
-                    field.align === "left" && "justify-start text-left",
-                    field.fontWeight === "bold" ? "font-bold" : "font-normal",
-                  )}
-                  style={{
-                    fontFamily: getCssFontFamily(field.fontFamily),
-                    fontSize: `${field.fontSize * (96 / 72) * zoom}px`,
-                    lineHeight: field.lineHeight || 1.15,
-                    color: field.color || "#0d1329",
-                  }}
-                >
-                  <span className={cn(field.wrapText ? "break-words w-full" : "whitespace-nowrap truncate")}>
-                    {field.staticText || field.sampleValue || field.name}
-                  </span>
-                </div>
+                {field.category === "items" ? (
+                  <div
+                    className={cn(
+                      "flex flex-col h-full w-full overflow-hidden",
+                      field.fontWeight === "bold" ? "font-bold" : "font-normal",
+                    )}
+                    style={{
+                      fontFamily: getCssFontFamily(field.fontFamily),
+                      fontSize: `${field.fontSize * (96 / 72) * zoom}px`,
+                      lineHeight: field.lineHeight || 1.15,
+                      color: field.color || "#0d1329",
+                    }}
+                  >
+                    {(() => {
+                      const rowCount = layout.tableConfig?.rowCount || 10;
+                      const rowH = (layout.tableConfig?.rowHeightMm || 6.3) * scale;
+                      const lines = (field.staticText || field.sampleValue || "").split("\n");
+                      return Array.from({ length: rowCount }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "flex w-full items-center overflow-hidden px-1 box-border",
+                            field.align === "right" && "justify-end text-right",
+                            field.align === "center" && "justify-center text-center",
+                            field.align === "left" && "justify-start text-left",
+                          )}
+                          style={{
+                            height: `${rowH}px`,
+                            minHeight: `${rowH}px`,
+                            maxHeight: `${rowH}px`,
+                          }}
+                        >
+                          <span
+                            className={cn(
+                              field.wrapText ? "break-words leading-tight w-full" : "whitespace-nowrap truncate",
+                            )}
+                          >
+                            {lines[i] || ""}
+                          </span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      "flex h-full w-full overflow-hidden p-0.5 items-center",
+                      field.align === "right" && "justify-end text-right",
+                      field.align === "center" && "justify-center text-center",
+                      field.align === "left" && "justify-start text-left",
+                      field.fontWeight === "bold" ? "font-bold" : "font-normal",
+                    )}
+                    style={{
+                      fontFamily: getCssFontFamily(field.fontFamily),
+                      fontSize: `${field.fontSize * (96 / 72) * zoom}px`,
+                      lineHeight: field.lineHeight || 1.15,
+                      color: field.color || "#0d1329",
+                    }}
+                  >
+                    <span className={cn(field.wrapText ? "break-words w-full" : "whitespace-nowrap truncate")}>
+                      {field.staticText || field.sampleValue || field.name}
+                    </span>
+                  </div>
+                )}
 
                 {/* 8 Resize Handles when selected (North, South, East, West and Corners) */}
                 {isSelected && (

@@ -281,8 +281,9 @@ export async function renderInvoicePdf(
     const fColUnit = getField("colUnit");
     const fColAmount = getField("colAmount");
 
-    const rowTop = layout.tableConfig?.rowTopMm || (inv.type === "charge" ? 81.5 : 86.0);
-    const rowH = layout.tableConfig?.rowHeightMm || (inv.type === "charge" ? 6.3 : 6.25);
+    const defaultRowTop = inv.type === "charge" ? 77.2 : 82.2;
+    const rowTop = fColDesc?.y ?? fColItem?.y ?? layout.tableConfig?.rowTopMm ?? defaultRowTop;
+    const rowH = layout.tableConfig?.rowHeightMm || 6.3;
 
     const slice = inv.items.slice(pi * rowsPerPage, (pi + 1) * rowsPerPage);
     slice.forEach((it, i) => {

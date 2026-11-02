@@ -332,5 +332,82 @@ describe("Invoice Layout System & Print Specifications", () => {
       expect(loadActiveLayout(invB.type).fields.find((f) => f.type === "date")?.x).toBe(155.0);
       expect(loadActiveLayout(invC.type).fields.find((f) => f.type === "date")?.x).toBe(140.0);
     });
+
+    it("matches exact column alignments and table rowTop for Charge Invoice", () => {
+      const chg = createDefaultLayout("charge");
+      const fItem = chg.fields.find((f) => f.type === "colItem")!;
+      const fDesc = chg.fields.find((f) => f.type === "colDesc")!;
+      const fQty = chg.fields.find((f) => f.type === "colQty")!;
+      const fUnit = chg.fields.find((f) => f.type === "colUnit")!;
+      const fAmount = chg.fields.find((f) => f.type === "colAmount")!;
+
+      expect(fItem.x).toBe(3.5);
+      expect(fItem.w).toBe(27.0);
+      expect(fDesc.x).toBe(32.5);
+      expect(fDesc.w).toBe(106.0);
+      expect(fQty.x).toBe(140.5);
+      expect(fQty.w).toBe(16.0);
+      expect(fUnit.x).toBe(158.5);
+      expect(fUnit.w).toBe(20.0);
+      expect(fAmount.x).toBe(180.5);
+      expect(fAmount.w).toBe(20.0);
+
+      expect(chg.tableConfig.rowTopMm).toBe(77.2);
+      expect(chg.tableConfig.rowHeightMm).toBe(6.3);
+    });
+
+    it("matches exact column alignments and table rowTop for Cash Invoice", () => {
+      const csh = createDefaultLayout("cash");
+      const fItem = csh.fields.find((f) => f.type === "colItem")!;
+      const fDesc = csh.fields.find((f) => f.type === "colDesc")!;
+      const fQty = csh.fields.find((f) => f.type === "colQty")!;
+      const fUnit = csh.fields.find((f) => f.type === "colUnit")!;
+      const fAmount = csh.fields.find((f) => f.type === "colAmount")!;
+
+      expect(fItem.x).toBe(11.0);
+      expect(fItem.w).toBe(25.0);
+      expect(fDesc.x).toBe(37.5);
+      expect(fDesc.w).toBe(99.5);
+      expect(fQty.x).toBe(139.0);
+      expect(fQty.w).toBe(15.0);
+      expect(fUnit.x).toBe(156.0);
+      expect(fUnit.w).toBe(19.0);
+      expect(fAmount.x).toBe(177.0);
+      expect(fAmount.w).toBe(18.5);
+
+      expect(csh.tableConfig.rowTopMm).toBe(82.2);
+      expect(csh.tableConfig.rowHeightMm).toBe(6.3);
+    });
+
+    it("migrates uncalibrated legacy column defaults to calibrated positions while preserving custom coordinates", () => {
+      // Old uncalibrated charge layout in legacy storage key
+      const oldCharge = createDefaultLayout("charge");
+      oldCharge.tableConfig.rowTopMm = 81.5;
+      oldCharge.fields = oldCharge.fields.map((f) => {
+        if (f.type === "colQty") return { ...f, x: 137.0, y: 81.5 };
+        if (f.type === "colUnit") return { ...f, x: 154.5, y: 81.5 };
+        if (f.type === "colAmount") return { ...f, x: 176.0, y: 81.5 };
+        if (f.type === "customer") return { ...f, x: 88.0, y: 44.0 }; // custom!
+        return f;
+      });
+
+      localStorage.setItem("sos_invoice_layout_charge", JSON.stringify(oldCharge));
+
+      const loaded = loadActiveLayout("charge");
+      const loadedQty = loaded.fields.find((f) => f.type === "colQty")!;
+      const loadedUnit = loaded.fields.find((f) => f.type === "colUnit")!;
+      const loadedAmount = loaded.fields.find((f) => f.type === "colAmount")!;
+      const loadedCustomer = loaded.fields.find((f) => f.type === "customer")!;
+
+      // Migrated to calibrated
+      expect(loadedQty.x).toBe(140.5);
+      expect(loadedUnit.x).toBe(158.5);
+      expect(loadedAmount.x).toBe(180.5);
+      expect(loaded.tableConfig.rowTopMm).toBe(77.2);
+
+      // Preserved custom
+      expect(loadedCustomer.x).toBe(88.0);
+      expect(loadedCustomer.y).toBe(44.0);
+    });
   });
 });

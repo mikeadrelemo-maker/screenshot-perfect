@@ -52,31 +52,17 @@ function createSampleInvoice(type: InvoiceType): InvoiceData {
     items: [
       {
         id: "1",
-        item: "ITM-001",
-        description: "Industrial Water Filter Replacement Cartridge 10-inch",
-        qty: "10",
-        unitPrice: "1000",
+        item: "HD.20.11-300",
+        description: "HDPE Pipe 20mm ISO SDR 11 x 300 mtrs",
+        qty: "5",
+        unitPrice: "6000",
       },
       {
         id: "2",
-        item: "ITM-002",
-        description: "Pressure Gauge Assembly 0-100 PSI Stainless",
-        qty: "2",
-        unitPrice: "3000",
-      },
-      {
-        id: "3",
-        item: "ITM-003",
-        description: "Brass Ball Valve Female to Female 1-inch NPT",
+        item: "HD.32.11-100",
+        description: "HDPE Pipe 32mm ISO SDR 11 x 100 mtrs",
         qty: "5",
-        unitPrice: "850",
-      },
-      {
-        id: "4",
-        item: "ITM-004",
-        description: "Heavy Duty Chemical Hose 5 meters with Couplers",
-        qty: "1",
-        unitPrice: "4200",
+        unitPrice: "4900",
       },
     ],
   };
@@ -222,6 +208,37 @@ export function InvoiceLayoutEditor({
   // Update a single field
   const handleUpdateField = useCallback(
     (updatedField: LayoutField) => {
+      if (updatedField.category === "items") {
+        const prevField = layout.fields.find((f) => f.id === updatedField.id);
+        const dy = prevField ? updatedField.y - prevField.y : 0;
+        const dh = prevField ? updatedField.h - prevField.h : 0;
+
+        const nextFields = layout.fields.map((f) => {
+          if (f.id === updatedField.id) return updatedField;
+          if (f.category === "items") {
+            return {
+              ...f,
+              y: Math.round((f.y + dy) * 10) / 10,
+              h: Math.round((f.h + dh) * 10) / 10,
+            };
+          }
+          return f;
+        });
+
+        const nextTableConfig = {
+          ...layout.tableConfig,
+          rowTopMm: Math.round((layout.tableConfig.rowTopMm + dy) * 10) / 10,
+        };
+
+        pushState({
+          ...layout,
+          fields: nextFields,
+          tableConfig: nextTableConfig,
+          updatedAt: new Date().toISOString(),
+        });
+        return;
+      }
+
       const nextFields = layout.fields.map((f) => (f.id === updatedField.id ? updatedField : f));
       pushState({
         ...layout,

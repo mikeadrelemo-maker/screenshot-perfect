@@ -8,6 +8,8 @@ import {
 import type { InvoiceType } from "./types";
 import type { InvoiceFontFamily } from "./fonts";
 
+export const KEY_CHARGE_V2 = "sos_invoice_layout_charge_v2";
+export const KEY_CASH_V2 = "sos_invoice_layout_cash_v2";
 export const KEY_CHARGE_V1 = "sos_invoice_layout_charge_v1";
 export const KEY_CASH_V1 = "sos_invoice_layout_cash_v1";
 export const KEY_CHARGE_LEGACY = "sos_invoice_layout_charge";
@@ -27,6 +29,10 @@ const VALID_FONT_FAMILIES = new Set<string>([
 ]);
 
 export function storageKeyForType(type: InvoiceType): string {
+  return type === "charge" ? KEY_CHARGE_V2 : KEY_CASH_V2;
+}
+
+export function v1StorageKeyForType(type: InvoiceType): string {
   return type === "charge" ? KEY_CHARGE_V1 : KEY_CASH_V1;
 }
 
@@ -50,6 +56,22 @@ export function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceTyp
       const validTypes = new Set(fallback.fields.map((field) => field.type));
       validTypes.add("customText");
       if (f && typeof f.id === "string" && (base || validTypes.has(f.type))) {
+        // Migrate uncalibrated legacy column defaults to calibrated positions
+        let calibratedF = { ...f };
+        if (type === "charge") {
+          if (f.type === "colItem" && f.x === 6.0 && f.y === 81.5) calibratedF = { ...calibratedF, x: 3.5, y: 77.2, w: 27.0 };
+          else if (f.type === "colDesc" && f.x === 32.0 && f.y === 81.5) calibratedF = { ...calibratedF, x: 32.5, y: 77.2, w: 106.0 };
+          else if (f.type === "colQty" && f.x === 137.0 && f.y === 81.5) calibratedF = { ...calibratedF, x: 140.5, y: 77.2, w: 16.0 };
+          else if (f.type === "colUnit" && f.x === 154.5 && f.y === 81.5) calibratedF = { ...calibratedF, x: 158.5, y: 77.2, w: 20.0 };
+          else if (f.type === "colAmount" && f.x === 176.0 && f.y === 81.5) calibratedF = { ...calibratedF, x: 180.5, y: 77.2, w: 20.0 };
+        } else if (type === "cash") {
+          if (f.type === "colItem" && f.x === 11.5 && f.y === 86.0) calibratedF = { ...calibratedF, x: 11.0, y: 82.2, w: 25.0 };
+          else if (f.type === "colDesc" && f.x === 36.5 && f.y === 86.0) calibratedF = { ...calibratedF, x: 37.5, y: 82.2, w: 99.5 };
+          else if (f.type === "colQty" && f.x === 135.0 && f.y === 86.0) calibratedF = { ...calibratedF, x: 139.0, y: 82.2, w: 15.0 };
+          else if (f.type === "colUnit" && f.x === 151.0 && f.y === 86.0) calibratedF = { ...calibratedF, x: 156.0, y: 82.2, w: 19.0 };
+          else if (f.type === "colAmount" && f.x === 171.5 && f.y === 86.0) calibratedF = { ...calibratedF, x: 177.0, y: 82.2, w: 18.5 };
+        }
+        f = calibratedF;
         const pageW = loaded.orientation === "landscape" ? LETTER_HEIGHT_MM : LETTER_WIDTH_MM;
         const pageH = loaded.orientation === "landscape" ? LETTER_WIDTH_MM : LETTER_HEIGHT_MM;
         const w = finite(f.w, base?.w ?? 30, 0.1, pageW);
@@ -117,7 +139,9 @@ export function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceTyp
         ? loaded.backgroundOpacity
         : 1.0,
     tableConfig: {
-      rowTopMm: finite(loaded.tableConfig?.rowTopMm, fallback.tableConfig.rowTopMm, 0, 250),
+      rowTopMm: (loaded.tableConfig?.rowTopMm === 81.5 && type === "charge") || (loaded.tableConfig?.rowTopMm === 86.0 && type === "cash")
+        ? fallback.tableConfig.rowTopMm
+        : finite(loaded.tableConfig?.rowTopMm, fallback.tableConfig.rowTopMm, 0, 250),
       rowHeightMm: finite(loaded.tableConfig?.rowHeightMm, fallback.tableConfig.rowHeightMm, 1, 30),
       rowCount: Math.floor(
         finite(loaded.tableConfig?.rowCount, fallback.tableConfig.rowCount, 1, 100),
@@ -135,9 +159,13 @@ export function loadActiveLayout(type: InvoiceType): InvoiceLayout {
     return createDefaultLayout(type);
   }
   try {
-    // 1. Try versioned key first
+    // 1. Try V2 key first
     let raw = localStorage.getItem(storageKeyForType(type));
-    // 2. Fallback to legacy key if versioned key not yet set
+    // 2. Fallback to V1 key
+    if (!raw) {
+      raw = localStorage.getItem(v1StorageKeyForType(type));
+    }
+    // 3. Fallback to legacy key
     if (!raw) {
       raw = localStorage.getItem(legacyStorageKeyForType(type));
     }
@@ -156,9 +184,10 @@ export function saveActiveLayout(layout: InvoiceLayout): void {
   const updated = { ...layout, updatedAt: new Date().toISOString() };
   try {
     const serialized = JSON.stringify(updated);
-    // Write to versioned key
+    // Write to V2 key
     localStorage.setItem(storageKeyForType(layout.invoiceType), serialized);
-    // Also mirror to legacy key for backwards compatibility
+    // Mirror to V1 and legacy keys for backwards compatibility
+    localStorage.setItem(v1StorageKeyForType(layout.invoiceType), serialized);
     localStorage.setItem(legacyStorageKeyForType(layout.invoiceType), serialized);
     // Dispatch real-time synchronization event for Print Preview and editor tabs
     window.dispatchEvent(new CustomEvent("sos-layout-changed", { detail: updated }));
