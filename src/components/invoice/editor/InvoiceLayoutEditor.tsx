@@ -44,11 +44,10 @@ function createSampleInvoice(type: InvoiceType): InvoiceData {
     dueDate: "11/26/2026",
     poNumber: "PO-99201",
     salesRep: "Juan Dela Cruz",
-    wht1Rate: "1",
-    wht1Enabled: true,
-    wht2Rate: "5",
-    wht2Enabled: true,
     whtRate: "1",
+    whtRate2: "5",
+    whtEnabled: true,
+    whtEnabled2: true,
     items: [
       {
         id: "1",

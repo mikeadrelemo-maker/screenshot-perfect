@@ -332,7 +332,7 @@ export async function renderInvoicePdf(
       drawFieldText(p, getField("net"), peso(totals.net));
       // Withholding Tax 1: Print ONLY percentage in designated label area
       if (totals.wht1Enabled) {
-        const rate1 = inv.wht1Rate ?? inv.whtRate ?? "1";
+        const rate1 = inv.whtRate;
         const rate1Str = `${rate1}%`;
         drawFieldText(p, getField("whtRate") || getField("wht1Rate"), rate1Str);
         if (totals.wht1.gt(0)) {
@@ -342,7 +342,7 @@ export async function renderInvoicePdf(
 
       // Withholding Tax 2: Print ONLY percentage in designated label area
       if (totals.wht2Enabled) {
-        const rate2 = inv.wht2Rate ?? inv.whtRate2 ?? "5";
+        const rate2 = inv.whtRate2 ?? "5";
         const rate2Str = `${rate2}%`;
         drawFieldText(p, getField("whtRate2") || getField("wht2Rate"), rate2Str);
         if (totals.wht2.gt(0)) {

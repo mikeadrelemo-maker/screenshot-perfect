@@ -134,9 +134,13 @@ describe("License System — Cryptography, Duration & Activation", () => {
 
       // Alter payload: change legitimate payload data
       const parts = code.slice("SOSLIC-".length).split(".");
+      const [payloadPart, signaturePart] = parts;
+      if (!payloadPart || !signaturePart) {
+        throw new Error("Expected the generated license code to contain a payload and signature");
+      }
       const decodedPayload = JSON.parse(
         new TextDecoder().decode(
-          Uint8Array.from(atob(parts[0].replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+          Uint8Array.from(atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
             c.charCodeAt(0),
           ),
         ),
@@ -146,7 +150,7 @@ describe("License System — Cryptography, Duration & Activation", () => {
         .replace(/\+/g, "-")
         .replace(/\//g, "_")
         .replace(/=+$/, "");
-      const tamperedCode = `SOSLIC-${tamperedPayloadB64}.${parts[1]}`;
+      const tamperedCode = `SOSLIC-${tamperedPayloadB64}.${signaturePart}`;
 
       const res = await verifyLicenseCode(tamperedCode, verificationPubKey);
       expect(res.valid).toBe(false);

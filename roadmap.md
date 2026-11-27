@@ -1,4 +1,5 @@
 # Update tasks
+- [x] Resolve current preview build type errors.
 - [ ] Fix missing PDF fonts and verify both PDF types.
 - [ ] Add independent sales-based withholding taxes and tests.
 - [ ] Keep converted invoice numbers blank and optional fields editable.

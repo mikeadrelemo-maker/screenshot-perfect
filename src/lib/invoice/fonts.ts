@@ -57,7 +57,7 @@ const cache = new Map<string, Promise<ArrayBuffer>>();
 
 export function loadInvoiceFont(family: InvoiceFontFamily, bold = false): Promise<ArrayBuffer> {
   const assetPair = assets[family] || assets["Liberation Serif"];
-  const asset = assetPair[bold ? 1 : 0];
+  const asset = assetPair?.[bold ? 1 : 0];
   if (!asset) throw new Error(`Unknown invoice font: ${family}`);
   const localUrl = `${import.meta.env.BASE_URL}fonts/${asset.original_filename}`;
   const cached = cache.get(localUrl);

@@ -129,7 +129,6 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
             label="Business address"
             value={inv.address}
             onChange={(v) => set("address", v)}
-            placeholder="Optional"
             className="col-span-2 md:col-span-3"
             placeholder="Customer business address (Optional)"
           />

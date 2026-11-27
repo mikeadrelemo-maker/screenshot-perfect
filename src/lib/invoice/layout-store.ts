@@ -98,8 +98,12 @@ export function reconcileLayout(loaded: Partial<InvoiceLayout>, type: InvoiceTyp
           visible: f.visible !== false,
           wrapText: f.wrapText === true,
           lineHeight: finite(f.lineHeight, base?.lineHeight ?? 1.15, 0.8, 3.0),
-          staticText: typeof f.staticText === "string" ? f.staticText : undefined,
-          sampleValue: typeof f.sampleValue === "string" ? f.sampleValue : base?.sampleValue,
+          ...(typeof f.staticText === "string" ? { staticText: f.staticText } : {}),
+          ...(typeof f.sampleValue === "string"
+            ? { sampleValue: f.sampleValue }
+            : typeof base?.sampleValue === "string"
+              ? { sampleValue: base.sampleValue }
+              : {}),
           zIndex: finite(f.zIndex, 1, 0, 10000),
         });
       }

@@ -50,12 +50,6 @@ const router = createRouter({
   scrollRestoration: true,
 });
 
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
-
 const rootEl = document.getElementById("root");
 
 if (!rootEl) {
