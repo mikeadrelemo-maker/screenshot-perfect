@@ -16,7 +16,7 @@ export const r2 = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 export interface LineCalc {
   vatUnit: Decimal; // VAT-inclusive unit price, rounded to 2dp
-  amount: Decimal;  // vatUnit × qty, 2dp
+  amount: Decimal;  // rounded original extended price × VAT factor, rounded to 2dp
   valid: boolean;
 }
 
@@ -25,7 +25,8 @@ export function calcLine(item: Pick<LineItem, "qty" | "unitPrice">): LineCalc {
   const price = toDec(item.unitPrice);
   if (!qty || !price) return { vatUnit: new Decimal(0), amount: new Decimal(0), valid: false };
   const vatUnit = r2(price.mul(VAT_FACTOR));
-  return { vatUnit, amount: r2(vatUnit.mul(qty)), valid: true };
+  const netAmount = r2(price.mul(qty));
+  return { vatUnit, amount: r2(netAmount.mul(VAT_FACTOR)), valid: true };
 }
 
 export interface Totals {

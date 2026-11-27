@@ -1,15 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { calcLine, calcTotals, peso } from "./calc";
+import { calcLine, calcTotals, peso, toDec } from "./calc";
 
 const example = { qty: "17", unitPrice: "3545.98225" };
 const igacos = [example];
 
 describe("VAT and Withholding Tax calculations (Base = Amount Net of VAT)", () => {
+  it("matches CHI-2298 line amounts, invoice totals, and source PDF total", () => {
+    const items = [
+      { qty: "20", unitPrice: "2476.9642" },
+      { qty: "40", unitPrice: "917.6027" },
+      { qty: "25", unitPrice: "647.3884" },
+    ];
+    const lineResults = items.map(calcLine);
+
+    expect(lineResults.map((line) => peso(line.vatUnit))).toEqual([
+      "₱2,774.20",
+      "₱1,027.72",
+      "₱725.08",
+    ]);
+    expect(lineResults.map((line) => peso(line.amount))).toEqual([
+      "₱55,483.99",
+      "₱41,108.60",
+      "₱18,126.88",
+    ]);
+
+    const totals = calcTotals(items, { wht1Enabled: false, wht2Enabled: false });
+    expect(peso(totals.totalSales)).toBe("₱114,719.47");
+    expect(peso(totals.vat)).toBe("₱12,291.37");
+    expect(peso(totals.net)).toBe("₱102,428.10");
+    expect(peso(totals.due)).toBe("₱114,719.47");
+
+    const sourcePdfTotal = toDec("114719.47");
+    expect(sourcePdfTotal).not.toBeNull();
+    expect(sourcePdfTotal && peso(totals.totalSales.sub(sourcePdfTotal).abs())).toBe("₱0.00");
+  });
+
   it("VAT-inclusive unit price is original × 1.12", () => {
     expect(peso(calcLine(example).vatUnit)).toBe("₱3,971.50");
   });
 
-  it("line amount is VAT unit price × qty", () => {
+  it("line amount is rounded original extended price × VAT factor", () => {
     expect(peso(calcLine(example).amount)).toBe("₱67,515.50");
   });
 
