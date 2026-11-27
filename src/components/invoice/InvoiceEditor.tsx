@@ -253,7 +253,7 @@ export function InvoiceEditor({ value: inv, onChange }: Props) {
         <div className="space-y-2 text-xs text-muted-foreground">
           <p>
             Unit price (VAT inc.) = original unit price × 1.12, rounded to centavos. Amount =
-            VAT-inclusive unit price × quantity.
+            round(original unit price × qty, 2) × 1.12, rounded to centavos.
           </p>
           <p>
             Withholding taxes are calculated independently using Amount Net of VAT as base:

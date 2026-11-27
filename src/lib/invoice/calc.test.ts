@@ -1,45 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { calcLine, calcTotals, peso, toDec } from "./calc";
+import { calcLine, calcTotals, peso } from "./calc";
 
 const example = { qty: "17", unitPrice: "3545.98225" };
 const igacos = [example];
 
 describe("VAT and Withholding Tax calculations (Base = Amount Net of VAT)", () => {
-  it("matches CHI-2298 line amounts, invoice totals, and source PDF total", () => {
-    const items = [
-      { qty: "20", unitPrice: "2476.9642" },
-      { qty: "40", unitPrice: "917.6027" },
-      { qty: "25", unitPrice: "647.3884" },
-    ];
-    const lineResults = items.map(calcLine);
-
-    expect(lineResults.map((line) => peso(line.vatUnit))).toEqual([
-      "₱2,774.20",
-      "₱1,027.72",
-      "₱725.08",
-    ]);
-    expect(lineResults.map((line) => peso(line.amount))).toEqual([
-      "₱55,483.99",
-      "₱41,108.60",
-      "₱18,126.88",
-    ]);
-
-    const totals = calcTotals(items, { wht1Enabled: false, wht2Enabled: false });
-    expect(peso(totals.totalSales)).toBe("₱114,719.47");
-    expect(peso(totals.vat)).toBe("₱12,291.37");
-    expect(peso(totals.net)).toBe("₱102,428.10");
-    expect(peso(totals.due)).toBe("₱114,719.47");
-
-    const sourcePdfTotal = toDec("114719.47");
-    expect(sourcePdfTotal).not.toBeNull();
-    expect(sourcePdfTotal && peso(totals.totalSales.sub(sourcePdfTotal).abs())).toBe("₱0.00");
-  });
-
   it("VAT-inclusive unit price is original × 1.12", () => {
     expect(peso(calcLine(example).vatUnit)).toBe("₱3,971.50");
   });
 
-  it("line amount is rounded original extended price × VAT factor", () => {
+  it("line amount is round(original price × qty, 2) × 1.12, rounded to centavos", () => {
     expect(peso(calcLine(example).amount)).toBe("₱67,515.50");
   });
 
@@ -201,5 +171,47 @@ describe("VAT and Withholding Tax calculations (Base = Amount Net of VAT)", () =
     const t = calcTotals(igacos, { wht1Rate: "1", wht2Rate: "5" });
     const computedDue = t.totalSales.sub(t.wht1).sub(t.wht2);
     expect(t.due.toString()).toBe(computedDue.toString());
+  });
+
+  describe("CHI-2298 regression test – exact amounts from real PDF", () => {
+    // Source PDF: CHI-2298.pdf
+    // Items from the actual invoice with 4-decimal original unit prices
+    const chi2298Items = [
+      { qty: "20", unitPrice: "2476.9642" }, // MX.32.11-100
+      { qty: "40", unitPrice: "917.6027" },  // MX.20.11-90
+      { qty: "25", unitPrice: "647.3884" },  // MX.20.17-90
+    ];
+
+    it("computes correct VAT-inclusive unit prices for display", () => {
+      const [l1, l2, l3] = chi2298Items.map(calcLine);
+      expect(peso(l1!.vatUnit)).toBe("₱2,774.20");
+      expect(peso(l2!.vatUnit)).toBe("₱1,027.72");
+      expect(peso(l3!.vatUnit)).toBe("₱725.08");
+    });
+
+    it("computes correct line amounts using round(price × qty, 2) × 1.12 formula", () => {
+      const [l1, l2, l3] = chi2298Items.map(calcLine);
+      // Item 1: round(2476.9642 × 20, 2) × 1.12 = round(49539.28 × 1.12, 2) = 55483.99
+      expect(peso(l1!.amount)).toBe("₱55,483.99");
+      // Item 2: round(917.6027 × 40, 2) × 1.12 = round(36704.11 × 1.12, 2) = 41108.60
+      expect(peso(l2!.amount)).toBe("₱41,108.60");
+      // Item 3: round(647.3884 × 25, 2) × 1.12 = round(16184.71 × 1.12, 2) = 18126.88
+      expect(peso(l3!.amount)).toBe("₱18,126.88");
+    });
+
+    it("computes correct invoice totals matching the source PDF – zero discrepancy", () => {
+      const t = calcTotals(chi2298Items, { wht1Enabled: false, wht2Enabled: false });
+      // PDF total: ₱114,719.47 — system must match exactly
+      expect(peso(t.totalSales)).toBe("₱114,719.47");
+      expect(peso(t.vat)).toBe("₱12,291.37");
+      expect(peso(t.net)).toBe("₱102,428.10");
+      expect(peso(t.due)).toBe("₱114,719.47");
+    });
+
+    it("the calculated total equals the source PDF total — discrepancy is ₱0.00", () => {
+      const t = calcTotals(chi2298Items, { wht1Enabled: false, wht2Enabled: false });
+      // The source PDF prints ₱114,719.47 — system total must equal it exactly
+      expect(t.totalSales.toFixed(2)).toBe("114719.47");
+    });
   });
 });
